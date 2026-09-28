@@ -6,7 +6,7 @@
 
 ## 现状
 
-骨架阶段:仓库结构、文档、检查规则已就位;Azure 两个阶段的资源都已建好(存储、队列、事件订阅、给 Snowflake 的权限);Snowflake 的存储集成和通知集成已建好,专用角色、库和 schema 的 SQL 已写好、还没执行。逐项状态见 `.harness/context/current-state.md`。
+骨架阶段:仓库结构、文档、检查规则已就位;Azure 两个阶段的资源都已建好(存储、队列、事件订阅、给 Snowflake 的权限);Snowflake 的两个集成、专用角色 MEDRAG_ADMIN、MEDRAG 库和四个 schema 已建好。逐项状态见 `.harness/context/current-state.md`。
 
 ## 目录
 
@@ -33,6 +33,6 @@
 1. Azure 第一阶段:`infra/azure` apply 资源组、存储账户、容器、队列、Event Grid system topic。(已完成)
 2. Snowflake:`sql/01_integrations.sql` 建存储集成和通知集成;在 Azure 租户里对两者 consent。(已完成)
 3. Azure 第二阶段:填入两个 service principal 的对象 ID,再 apply 角色分配和事件订阅。(已完成)
-4. Snowflake:`sql/00_role.sql` 建专用角色 MEDRAG_ADMIN 和 MEDRAG 库,再执行一次 `sql/01_integrations.sql` 把两个集成的 USAGE 授给它,然后 `sql/02_schemas.sql`。新环境从头部署时按 00、01、02 的顺序执行。
-5. Snowflake:建 Git 仓库对象,之后的 SQL 都从仓库执行。
+4. Snowflake:`sql/00_role.sql` 建专用角色 MEDRAG_ADMIN 和 MEDRAG 库,再执行一次 `sql/01_integrations.sql` 把两个集成的 USAGE 授给它,然后 `sql/02_schemas.sql`。新环境从头部署时按 00、01、02 的顺序执行。(已完成)
+5. Snowflake:用户建只读 GitHub token 的 secret,再执行 `sql/03_git_repo.sql` 建 Git 仓库对象;之后的 SQL 都从仓库执行。
 6. 先验证三项(见 `docs/decisions.md`),再写入库过程。

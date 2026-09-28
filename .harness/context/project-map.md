@@ -18,10 +18,11 @@
 - `sql/00_role.sql`:专用角色 MEDRAG_ADMIN、MEDRAG 库、账户级权限(ACCOUNTADMIN 执行)。
 - `sql/01_integrations.sql`:Azure 存储集成和通知集成,以及授给 MEDRAG_ADMIN 的 USAGE(ACCOUNTADMIN 执行,值在执行时传入)。
 - `sql/02_schemas.sql`:四个 schema(MEDRAG_ADMIN 执行)。
+- `sql/03_git_repo.sql`:Git 用的 API 集成(ACCOUNTADMIN)和 Git 仓库对象 `MEDRAG.OPS.REPO`(MEDRAG_ADMIN);只读 token 的 secret `MEDRAG.OPS.GITHUB_READONLY` 由用户自己建。
 
 计划(还没建):
 
-- `sql/`:`03_git_repo`、`04_stage`、`10_config`、`11_tables`、`12_doc_metadata`、`20_chunk`、`30_ingest`、`31_task`、`40_search`、`50_checks`、`90_monitor`,以及部署入口脚本。
+- `sql/`:`04_stage`、`10_config`、`11_tables`、`12_doc_metadata`、`20_chunk`、`30_ingest`、`31_task`、`40_search`、`50_checks`、`90_monitor`,以及部署入口脚本。
 - `eval/`:`00_schema`、`10_match`、`20_run_eval`、`30_experiment`、`40_labels`。
 - `app/`:`src/medrag_app/`(`retrieval`、`generation`、`api`、`ui`、`settings`)、`tests/`、`Dockerfile`、`spcs/service.yaml`。
 - `scripts/stage_corpus.py`:一次性语料脚本,在外部机器上运行。

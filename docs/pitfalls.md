@@ -55,6 +55,8 @@
 ## 本机工具
 
 - 【实测】2026-09-28。snow CLI 用 OAUTH_AUTHORIZATION_CODE 登录时,如果连接配置里的 account 含大写字母,会报 "Oauth code flow requirement 'client_id' is empty"。connector 4.7.1 用 host 拼出授权地址,再把解析出的主机名(已转成小写)和 host 原样比较,大小写不一致就不用内置的 LOCAL_APPLICATION 凭据。执行时用 `--account` 传小写就能登录。
+- 【实测】2026-09-28。不开 token 缓存时,snow CLI 每次连接都要在浏览器里重新登录,2 分钟内没完成就报 "Unable to receive the OAuth message within a given timeout",脚本什么都没执行。一次执行多个文件时,把文件拼起来用 `-i` 从标准输入传,只登录一次。
+- 【实测】2026-09-28。API 集成的 ALLOWED_AUTHENTICATION_SECRETS 引用的 secret 必须已经存在,否则编译就报 "does not exist or not authorized"。先建 secret,再建 API 集成。
 
 ## 方法论
 
