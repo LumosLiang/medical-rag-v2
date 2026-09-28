@@ -19,6 +19,7 @@
 --   snow sql -f sql/03_git_repo.sql --enable-templating JINJA -D repo_url="$(git remote get-url origin)"
 --
 -- token 到期后:在 GitHub 上重新生成,再 ALTER SECRET MEDRAG.OPS.GITHUB_READONLY SET PASSWORD = '<新 token>'。
+-- 报错排查见 docs/pitfalls.md 的"Git 仓库对象"一节。
 
 -- 第 2 段:账户级的 API 集成,只放行这一个仓库、只认上面那个 secret。
 USE ROLE ACCOUNTADMIN;

@@ -38,6 +38,7 @@
 - 【文档】Task 的 WHEN 只支持 SYSTEM$STREAM_HAS_DATA、SYSTEM$GET_PREDECESSOR_RETURN_VALUE、布尔运算和比较运算,不能查表(官方 CREATE TASK)。
 - 【文档】一个 stream 只应被一个 task 消费;只 SELECT 不会让 stream 前进(官方 CREATE TASK、Introduction to streams)。
 - 【文档】EXECUTE IMMEDIATE FROM 的模板访问不了 Git 仓库里的其它文件(include、import 不行);嵌套执行最多 5 层;单个文件不超过 10MB。
+- 【文档】EXECUTE IMMEDIATE FROM 执行到某条失败就停,返回那条的报错;前面的语句已经生效,不回滚(官方 EXECUTE IMMEDIATE FROM)。所以每个 SQL 文件都要能重复执行。
 
 ## Azure 和外部 stage
 
@@ -52,11 +53,19 @@
 - 【文档】ADLS Gen2 也要用 blob.core.windows.net 端点;stage URL 要以 `/` 结尾。
 - 【文档】azurerm provider v5 默认不自动注册资源提供程序,要在 provider 里列出用到的(本项目是 Microsoft.Storage 和 Microsoft.EventGrid)。
 
+## Git 仓库对象
+
+- 【实测】2026-09-28。API 集成的 ALLOWED_AUTHENTICATION_SECRETS 引用的 secret 必须已经存在,否则编译就报 "does not exist or not authorized"。先建 secret,再建 API 集成。
+- 【实测】2026-09-28。DESCRIBE API INTEGRATION 的结果里没有 ALLOWED_AUTHENTICATION_SECRETS 这一行,用 owner 查也没有。核对不了放行的是哪个 secret,只能看建集成时的 SQL。
+- 【实测】2026-09-28。CREATE GIT REPOSITORY 连私有仓库时先报 "Operation clone is not permitted by server",后来又报 "Operation 'clone' is not authorized"。两次 Snowflake 这边的集成和 secret 都没动,用户在 GitHub 上调整 token 后成功。所以先查 token:fine-grained token 要选中这个仓库,Contents 设为 Read-only;重新生成 token 后旧值立刻作废,secret 要跟着 `ALTER SECRET ... SET PASSWORD`。官方排查页(Troubleshooting Git in Snowflake)的说法相同。
+- 【待验证】自测 token 不用把 token 交给别人:`curl -s -o /dev/null -w '%{http_code}\n' -u <GitHub 用户名> https://api.github.com/repos/<owner>/<repo>/contents/README.md`,提示时输入 token(不显示,也不进 shell 历史)。按 GitHub REST API 的约定:200 能读,401 token 值无效,404 看不到这个仓库,403 缺权限。
+
 ## 本机工具
 
 - 【实测】2026-09-28。snow CLI 用 OAUTH_AUTHORIZATION_CODE 登录时,如果连接配置里的 account 含大写字母,会报 "Oauth code flow requirement 'client_id' is empty"。connector 4.7.1 用 host 拼出授权地址,再把解析出的主机名(已转成小写)和 host 原样比较,大小写不一致就不用内置的 LOCAL_APPLICATION 凭据。执行时用 `--account` 传小写就能登录。
 - 【实测】2026-09-28。不开 token 缓存时,snow CLI 每次连接都要在浏览器里重新登录,2 分钟内没完成就报 "Unable to receive the OAuth message within a given timeout",脚本什么都没执行。一次执行多个文件时,把文件拼起来用 `-i` 从标准输入传,只登录一次。
-- 【实测】2026-09-28。API 集成的 ALLOWED_AUTHENTICATION_SECRETS 引用的 secret 必须已经存在,否则编译就报 "does not exist or not authorized"。先建 secret,再建 API 集成。
+- 【实测】2026-09-28。IDE 里一次执行多条语句时,只显示最后一条的结果,前面某条失败了也看不到:CREATE GIT REPOSITORY 失败了,显示的却是后面 FETCH 报"不存在"。关键 DDL 单条执行,或者放在最后一条。
+- 【实测】2026-09-28。IDE 连接会沿用上一次执行留下的角色:上一次切到了 ACCOUNTADMIN,下一次没写 USE ROLE 就还是 ACCOUNTADMIN。每次执行都以 USE ROLE 开头。
 
 ## 方法论
 

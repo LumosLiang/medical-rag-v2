@@ -12,7 +12,7 @@
 | Snowflake 存储集成、通知集成 | 已实现 | 2026-09-28 用 `sql/01_integrations.sql` 建成,两者 ENABLED;USAGE 已授给 MEDRAG_ADMIN |
 | 专用角色 MEDRAG_ADMIN、MEDRAG 库 | 已验证 | 2026-09-28 用 `sql/00_role.sql` 建成。已用 SHOW GRANTS 核对:挂在 SYSADMIN 下、已授给当前用户;拥有库;有 EXECUTE TASK、CORTEX_USER、两个 warehouse 和两个集成的 USAGE |
 | schema | 已验证 | 2026-09-28 用 `sql/02_schemas.sql` 建成 INGEST、CORE、EVAL、OPS,owner 都是 MEDRAG_ADMIN |
-| Git 仓库对象 | 已实现待验证 | `sql/03_git_repo.sql` 已写;等用户建 GitHub 只读 token 和 secret |
+| Git 仓库对象 | 已验证 | 2026-09-28 用 IDE 连接执行 `sql/03_git_repo.sql` 第 2、3 段建成:Git 用的 API 集成 MEDRAG_GIT_API_INT(ENABLED,USAGE 已授给 MEDRAG_ADMIN)、仓库对象 MEDRAG.OPS.REPO(owner MEDRAG_ADMIN);只读 token 的 secret 由用户建。FETCH 后 main 的提交和本地 HEAD 一致,四个 SQL 文件的 blob 哈希和 `git ls-tree` 一致;从仓库执行 `02_schemas.sql` 成功(可重复执行,没有新建对象) |
 | 部署入口(从 Git 仓库对象按顺序执行 SQL、记录 sha) | 计划 | |
 | stage、stream、task | 计划 | |
 | FILE_STATE、PARSED_DOCS、CHUNKS | 计划 | |
@@ -28,7 +28,7 @@
 
 ## 先验证
 
-三项都待验证,方法和判断标准见 `docs/decisions.md`。Azure、两个集成、角色和 schema 都已就绪,第 1、2 项可以随时做。
+三项都待验证,方法和判断标准见 `docs/decisions.md`。Azure、两个集成、角色、schema 和 Git 仓库对象都已就绪,第 1、2 项可以随时做。
 
 ## 未决
 
