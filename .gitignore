@@ -1,0 +1,28 @@
+# Terraform:状态里有存储账户密钥,变量文件里有账号相关的值,都不进仓库
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.tfplan
+crash.log
+crash.*.log
+
+# 本地配置、密钥、只在本机用的检查规则
+.env
+.env.*
+*.pem
+*.p8
+.harness/local/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# 语料脚本的本地缓存
+scripts/.cache/
+
+# macOS
+.DS_Store

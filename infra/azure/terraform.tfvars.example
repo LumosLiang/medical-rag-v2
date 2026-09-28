@@ -1,0 +1,7 @@
+# 复制成 terraform.tfvars 再填。terraform.tfvars 已在 .gitignore 里,真实值不进仓库。
+
+storage_account_name = "<全局唯一,3 到 24 位小写字母和数字>"
+
+# 第二阶段:Snowflake 两个集成完成 consent、service principal 出现之后再填。
+# snowflake_storage_sp_object_id = "<存储集成的 service principal 对象 ID>"
+# snowflake_queue_sp_object_id   = "<通知集成的 service principal 对象 ID>"

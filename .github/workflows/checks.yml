@@ -1,0 +1,36 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  forbidden-content:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: 扫描不该进仓库的内容
+        env:
+          EXTRA_FORBIDDEN_PATTERNS: ${{ secrets.EXTRA_FORBIDDEN_PATTERNS }}
+        run: bash scripts/check_forbidden.sh
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/azure
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.16.0
+          terraform_wrapper: false
+      - name: 格式
+        run: terraform fmt -check -recursive
+      - name: 初始化(不连后端)
+        run: terraform init -backend=false -input=false
+      - name: 校验
+        run: terraform validate
