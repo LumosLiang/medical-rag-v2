@@ -22,6 +22,10 @@
 
 用户定。全程在 Snowflake 里执行,部署时能记下提交的 sha,评测结果可以追溯到代码版本。限制:模板不能 include Git 仓库里的其它文件,嵌套执行最多 5 层(官方 *EXECUTE IMMEDIATE FROM*)。仓库放在 GitHub 私有仓库(2026-09-28 用户定)。
 
+### MEDRAG 的对象归专用角色 MEDRAG_ADMIN(2026-09-28)
+
+用户定。task 按 owner 角色的权限运行(官方 CREATE TASK):用专用角色,入库过程出错或写错时影响不到库外的对象,也不带 ACCOUNTADMIN 的账户级权限。代价是 ACCOUNTADMIN 要一次性授权:库的所有权、EXECUTE TASK、两个 warehouse 和两个集成的 USAGE、SNOWFLAKE.CORTEX_USER。账户级对象(集成)仍由 ACCOUNTADMIN 建。角色挂在 SYSADMIN 下面。
+
 ### 切分用官方函数,每块不超过 512 token(2026-09-27)
 
 v1 的 8 条切分规则,MRR 只比官方切分高 0.03,算打平,块却多了 68%。v1 照官方示例用 2000 字符切,39.6% 的块超过 512 token,向量那一路被静默截断(Cortex Search 概览页建议每块不超过 512 token)。所以 v2 从官方函数起步,某条规则被评测证明有用再加。

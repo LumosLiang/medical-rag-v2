@@ -1,5 +1,6 @@
 --!jinja
--- 账户级引导对象:Azure 存储集成和通知集成。整个项目只执行一次。
+-- 账户级引导对象:Azure 存储集成和通知集成,以及把它们的 USAGE 授给 MEDRAG_ADMIN。
+-- 可以重复执行:已经存在的集成不会被改动。必须在 00_role.sql 之后执行。
 --
 -- 用 ACCOUNTADMIN 执行。三个值取自 infra/azure 的 terraform output,执行时传入,不写进仓库:
 --   snow sql -f sql/01_integrations.sql --enable-templating JINJA \
@@ -35,6 +36,10 @@ CREATE NOTIFICATION INTEGRATION IF NOT EXISTS MEDRAG_AZURE_QUEUE_INT
   AZURE_STORAGE_QUEUE_PRIMARY_URI = '{{ queue_url }}'
   AZURE_TENANT_ID = '{{ tenant_id }}'
   COMMENT = 'medrag v2: Event Grid messages for directory table auto-refresh';
+
+-- MEDRAG_ADMIN 建 stage 时要用这两个集成:stage 引用存储集成,directory table 的自动刷新引用通知集成。
+GRANT USAGE ON INTEGRATION MEDRAG_AZURE_STORAGE_INT TO ROLE MEDRAG_ADMIN;
+GRANT USAGE ON INTEGRATION MEDRAG_AZURE_QUEUE_INT TO ROLE MEDRAG_ADMIN;
 
 -- consent 要用的 AZURE_CONSENT_URL 和 AZURE_MULTI_TENANT_APP_NAME 在这两条的结果里。
 DESC STORAGE INTEGRATION MEDRAG_AZURE_STORAGE_INT;

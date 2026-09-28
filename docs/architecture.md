@@ -85,7 +85,7 @@ Snowflake 账户在 AWS 东京,文件在 Azure。官方写明,directory table �
 ## 8. 部署
 
 - Azure:`infra/azure/` 的 Terraform,在本机执行 plan,apply 前由用户批准。
-- Snowflake 的引导对象(库、两个集成、Git 用的 API 集成和 secret、Git 仓库对象)用 snow CLI 执行一次。
+- Snowflake 的引导对象用 snow CLI 执行一次:专用角色 MEDRAG_ADMIN 和 MEDRAG 库(`sql/00_role.sql`)、两个集成(`sql/01_integrations.sql`)、schema(`sql/02_schemas.sql`)、Git 用的 API 集成、secret 和 Git 仓库对象。MEDRAG 库和里面的对象都归 MEDRAG_ADMIN,task 按它的权限运行;只有账户级对象(集成)由 ACCOUNTADMIN 建,再把 USAGE 授给 MEDRAG_ADMIN。
 - 之后的 SQL 都从 Snowflake 的 Git 仓库对象执行(`EXECUTE IMMEDIATE FROM`),部署时记下提交的 sha,评测结果引用它。存储账户名、租户 ID 这类值通过 `USING` 在执行时传入,不写进仓库。模板不能 include Git 仓库里的其它文件,所以入口脚本用嵌套的 `EXECUTE IMMEDIATE FROM` 逐个执行(官方限制:最多嵌套 5 层)。
 - 代码放在 GitHub 私有仓库。
 

@@ -37,6 +37,7 @@
   - 删除,或对已有对象 CREATE OR REPLACE。
 - 需要用户介入的(在浏览器里 consent、建访问令牌、在 Snowflake 里存 secret),停下来说清楚要做什么,做完再继续。
 - 仓库和文档里不出现账户标识、连接名、租户和订阅 ID、存储账户名、密钥、本机路径。这些值放在不进仓库的本地文件里,执行时传入。提交前跑 `scripts/check_forbidden.sh`。
+- MEDRAG 库里的对象都归 MEDRAG_ADMIN,在 SQL 里先 `USE ROLE MEDRAG_ADMIN`。只有账户级对象(集成等)用 ACCOUNTADMIN 建,再把 USAGE 授给 MEDRAG_ADMIN。
 - 用户自己写的模块(见 `current-state.md`)只搭接口、写清要求和验收方法,不替他写。
 - 只做 Snowflake 这一套。不引入 LangChain 等编排框架,除非某一步确实更省事且说得清用途。
 - 涉及 Snowflake、Azure 的行为和限制,以官方文档或实测为准,写明出处;没验证的标"待验证"。

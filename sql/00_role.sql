@@ -1,0 +1,41 @@
+-- 账户级引导:项目专用角色、库、账户级权限。用 ACCOUNTADMIN 执行,可以重复执行。
+--   snow sql -f sql/00_role.sql
+-- 必须在 01_integrations.sql 之前执行:那里把两个集成的 USAGE 授给这里建的角色。
+--
+-- MEDRAG_ADMIN 拥有 MEDRAG 库和里面的所有对象,task 按它的权限运行,不带 ACCOUNTADMIN 的全部权限。
+-- 只有账户级对象(两个集成、Git 用的 API 集成)仍由 ACCOUNTADMIN 建,再把 USAGE 授给 MEDRAG_ADMIN。
+
+USE ROLE ACCOUNTADMIN;
+
+CREATE ROLE IF NOT EXISTS MEDRAG_ADMIN
+  COMMENT = 'medrag v2: owns database MEDRAG and runs its tasks';
+
+-- 自定义角色挂在 SYSADMIN 下面,SYSADMIN 和 ACCOUNTADMIN 仍能管理这些对象。
+GRANT ROLE MEDRAG_ADMIN TO ROLE SYSADMIN;
+
+-- 授给执行本脚本的用户。用户名不写进仓库,运行时取 CURRENT_USER()。
+EXECUTE IMMEDIATE $$
+BEGIN
+  LET stmt STRING := 'GRANT ROLE MEDRAG_ADMIN TO USER "' || CURRENT_USER() || '"';
+  EXECUTE IMMEDIATE :stmt;
+  RETURN 'MEDRAG_ADMIN granted to the current user';
+END;
+$$;
+
+-- 库由 ACCOUNTADMIN 建好,再把所有权交给 MEDRAG_ADMIN,这样不用给它账户级的 CREATE DATABASE。
+-- 新库自带的 PUBLIC schema 一起交出去。
+CREATE DATABASE IF NOT EXISTS MEDRAG
+  COMMENT = 'medrag v2: medical literature RAG';
+GRANT OWNERSHIP ON DATABASE MEDRAG TO ROLE MEDRAG_ADMIN COPY CURRENT GRANTS;
+GRANT OWNERSHIP ON SCHEMA MEDRAG.PUBLIC TO ROLE MEDRAG_ADMIN COPY CURRENT GRANTS;
+
+-- 运行自己拥有的 task。task 用 warehouse、不用 serverless,所以不需要 EXECUTE MANAGED TASK。
+GRANT EXECUTE TASK ON ACCOUNT TO ROLE MEDRAG_ADMIN;
+
+-- 沿用 v1 的两个 warehouse:解析用 MEDIUM,索引和轻量任务用 X-SMALL。
+GRANT USAGE ON WAREHOUSE MEDICAL_RAG_PARSE_WH TO ROLE MEDRAG_ADMIN;
+GRANT USAGE ON WAREHOUSE MEDICAL_RAG_INDEX_WH TO ROLE MEDRAG_ADMIN;
+
+-- AI_PARSE_DOCUMENT、AI_COMPLETE、COUNT_TOKENS、SPLIT_TEXT_* 这些 Cortex 函数需要这个数据库角色。
+-- 账户里目前 PUBLIC 已经有它;这里显式授一次,不依赖 PUBLIC 上的授权。
+GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE MEDRAG_ADMIN;

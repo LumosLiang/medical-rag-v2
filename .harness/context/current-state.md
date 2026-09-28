@@ -6,10 +6,12 @@
 |---|---|---|
 | 仓库结构、文档、检查规则 | 已实现 | |
 | 提交前检查 | 已实现 | 禁止内容扫描、Terraform 格式和校验;本机提交前跑一次,推送后 GitHub Actions 再跑一次 |
-| Azure 的 Terraform 代码 | 已实现 | 第一阶段已 apply;第二阶段(角色分配、事件订阅)的代码未经 apply 验证 |
+| Azure 的 Terraform 代码 | 已实现 | 两个阶段都已 apply |
 | Azure 资源(第一阶段) | 已验证 | 2026-09-28 建成:资源组、存储账户(ADLS Gen2)、容器、队列、system topic。已核对实际设置;apply 后 plan 无差异 |
-| Azure 资源(第二阶段) | 计划 | 存储这边的 service principal 已在租户里;通知这边等用户 consent、service principal 出现 |
-| Snowflake 存储集成、通知集成 | 已实现 | 2026-09-28 用 `sql/01_integrations.sql` 建成,两者 ENABLED。还没有 Azure 权限,读文件和队列要等第二阶段 |
+| Azure 资源(第二阶段) | 已验证 | 2026-09-28 建成:两条角色分配、事件订阅。已在 Azure 上核对角色、范围和订阅的过滤条件;apply 后 plan 无差异。Snowflake 这边还没有 stage,端到端没有测过 |
+| Snowflake 存储集成、通知集成 | 已实现 | 2026-09-28 用 `sql/01_integrations.sql` 建成,两者 ENABLED。授给 MEDRAG_ADMIN 的两条 USAGE 还没执行 |
+| 专用角色 MEDRAG_ADMIN、MEDRAG 库 | 已实现待验证 | `sql/00_role.sql` 已写,等用户批准执行 |
+| schema | 已实现待验证 | `sql/02_schemas.sql` 已写,等 00 执行之后 |
 | Git 仓库对象和部署入口 | 计划 | |
 | stage、stream、task | 计划 | |
 | FILE_STATE、PARSED_DOCS、CHUNKS | 计划 | |
@@ -25,7 +27,7 @@
 
 ## 先验证
 
-三项都待验证,方法和判断标准见 `docs/decisions.md`。第 1、2 项要等 Azure 资源和两个集成就绪。
+三项都待验证,方法和判断标准见 `docs/decisions.md`。Azure 和两个集成已经就绪;第 1、2 项还要等 MEDRAG_ADMIN 和 schema 建好。
 
 ## 未决
 
