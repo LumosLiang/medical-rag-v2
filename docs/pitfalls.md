@@ -36,6 +36,7 @@
 - 【v1 实测】存储过程里 SQLERRM 要写成 `:SQLERRM`;`:rec.字段` 不合法,先赋给局部变量。
 - 【v1 实测】COMMENT 只能是一个字符串字面量,不能拼接。
 - 【实测】2026-09-28。`SET x = UUID_STRING();` 报 "Unsupported feature 'assignment from non-constant source expression'";包一层子查询 `SET x = (SELECT UUID_STRING());` 可以。
+- 【实测】2026-09-28。CREATE PROCEDURE 里 COMMENT 要写在 EXECUTE AS 前面,反过来报 "unexpected 'COMMENT'"。
 - 【文档】Task 的 WHEN 只支持 SYSTEM$STREAM_HAS_DATA、SYSTEM$GET_PREDECESSOR_RETURN_VALUE、布尔运算和比较运算,不能查表(官方 CREATE TASK)。
 - 【文档】一个 stream 只应被一个 task 消费;只 SELECT 不会让 stream 前进(官方 CREATE TASK、Introduction to streams)。
 - 【文档】stream 建好后,既没被 DML 消费、也没被 SYSTEM$STREAM_HAS_DATA 调用(stream 为空时),最多 14 天(MAX_DATA_EXTENSION_TIME_IN_DAYS 的默认值)后可能过期;过期后只能重建,没消费的变化就丢了(官方 Introduction to streams)。所以 stream 和消费它的 task 在同一次部署里建。

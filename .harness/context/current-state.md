@@ -15,10 +15,11 @@
 | Git 仓库对象 | 已验证 | 2026-09-28 用 IDE 连接执行 `sql/03_git_repo.sql` 第 2、3 段建成:Git 用的 API 集成 MEDRAG_GIT_API_INT(ENABLED,USAGE 已授给 MEDRAG_ADMIN)、仓库对象 MEDRAG.OPS.REPO(owner MEDRAG_ADMIN);只读 token 的 secret 由用户建。FETCH 后 main 的提交和本地 HEAD 一致,四个 SQL 文件的 blob 哈希和 `git ls-tree` 一致;从仓库执行 `02_schemas.sql` 成功(可重复执行,没有新建对象) |
 | 部署入口 `sql/deploy.sql`、`OPS.DEPLOY_LOG` | 已验证 | 2026-09-28 从仓库对象执行成功:`OPS.DEPLOY_LOG` 已建(owner MEDRAG_ADMIN),记下的 commit_sha 和刚推送的提交一致,状态 SUCCEEDED。第一次执行在 SET 上报错(已修,见 `docs/pitfalls.md`),失败前只执行了建表。现在还没有要嵌套执行的文件 |
 | stage、stream `sql/04_stage.sql` | 已实现待验证 | 已写,没执行;要和 `31_task` 一起加进部署入口,避免 stream 空放过期 |
-| task | 计划 | |
-| FILE_STATE、PARSED_DOCS、CHUNKS | 计划 | |
-| 切分过程 `sql/20_chunk.sql` | 计划 | 切分本身是环节 5A |
-| 入库过程 `sql/30_ingest.sql` | 计划 | 消费 stream、判断变更、解析是环节 2A、2B、3A |
+| task | 计划 | `sql/31_task.sql` 只有留空(环节 6A),不进部署入口 |
+| 配置 `sql/10_config.sql` | 骨架已部署 | 2026-09-28 部署(`55fa971`):`CORE.PIPELINE_CONFIG` 已建,是空表(第一个配置是环节 4A)。"已部署的配置不可改"的比对用会话临时表测过:改参数会被发现,只改 is_active、note 放行;部署时真正报 -20101 要等有了配置才能测(4A 的验收) |
+| FILE_STATE、PARSED_DOCS、CHUNKS `sql/11_tables.sql` | 已验证 | 2026-09-28 部署(`55fa971`),owner 都是 MEDRAG_ADMIN,CHUNKS 的 change tracking 是 ON,都是空表 |
+| 切分过程 `sql/20_chunk.sql` | 骨架已部署 | `CORE.CHUNK_DOC` 已建;调用时先检查配置和解析结果(已测:配置不存在时报 -20111);切分本身是环节 5A |
+| 入库过程 `sql/30_ingest.sql` | 骨架已部署 | `INGEST.RUN_INGEST`、`PLAN_BATCH`、`PARSE_FILE` 已建。已测:`PLAN_BATCH`、`PARSE_FILE` 抛 NOT_IMPLEMENTED(PARSE_FILE 没走到 AI 调用);`RUN_INGEST` 在没有生效配置时先报 -20121。消费 stream、判断变更、解析是环节 2A、2B、3A |
 | Cortex Search 服务 | 计划 | |
 | 数据检查 `RUN_DATA_CHECKS` | 计划 | |
 | 评测 `RUN_EVAL` | 计划 | evidence 匹配 `eval/10_match.sql` 等见 `docs/hands-on.md` 环节 9 |
