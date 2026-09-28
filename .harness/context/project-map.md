@@ -21,10 +21,17 @@
 - `sql/03_git_repo.sql`:Git 用的 API 集成(ACCOUNTADMIN)和 Git 仓库对象 `MEDRAG.OPS.REPO`(MEDRAG_ADMIN);只读 token 的 secret `MEDRAG.OPS.GITHUB_READONLY` 由用户自己建。
 - `sql/deploy.sql`:部署入口。只从 main 部署;按编号嵌套执行 `sql/` 里的文件(00–03 除外),每次在 `OPS.DEPLOY_LOG` 记一行。
 - `sql/04_stage.sql`:语料的外部 stage `INGEST.CORPUS_STAGE`(容器里的 `pdf/`,directory table 自动刷新)和 stream `INGEST.CORPUS_STREAM`。还没加进部署入口,要和 `31_task` 一起加。
+- `sql/10_config.sql`:`CORE.PIPELINE_CONFIG`,以及"已部署的配置不可改"的检查。
+- `sql/11_tables.sql`:`INGEST.FILE_STATE`、`INGEST.PARSED_DOCS`、`CORE.CHUNKS`。
+- `sql/20_chunk.sql`:切分过程 `CORE.CHUNK_DOC`。
+- `sql/30_ingest.sql`:入库过程 `INGEST.RUN_INGEST`、`INGEST.PLAN_BATCH`、`INGEST.PARSE_FILE`。
+- `sql/31_task.sql`:入库 task(还没加进部署入口)。
+- `sql/spike/`:先验证和动手实验的脚本,不进部署入口。
+- `docs/hands-on.md`:每个环节留给用户的空、验收和状态。
 
 计划(还没建):
 
-- `sql/`:`10_config`、`11_tables`、`12_doc_metadata`、`20_chunk`、`30_ingest`、`31_task`、`40_search`、`50_checks`、`90_monitor`。
+- `sql/`:`12_doc_metadata`、`40_search`、`50_checks`、`90_monitor`。
 - `eval/`:`00_schema`、`10_match`、`20_run_eval`、`30_experiment`、`40_labels`。
 - `app/`:`src/medrag_app/`(`retrieval`、`generation`、`api`、`ui`、`settings`)、`tests/`、`Dockerfile`、`spcs/service.yaml`。
 - `scripts/stage_corpus.py`:一次性语料脚本,在外部机器上运行。

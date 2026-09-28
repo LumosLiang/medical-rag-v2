@@ -5,7 +5,8 @@
 ## 入库
 
 - 事件只走一条路:Azure Event Grid → Storage Queue → 通知集成 → 外部 stage 的 directory table 自动刷新 → stream → task → 入库过程。不用 Snowpipe(只把结构化文件装进表)和 Snowpipe Streaming(按行追加),两者都处理不了覆盖和删除。
-- 入库过程第一步用 INSERT … SELECT 把 stream 里这一批变更写进 FILE_STATE。只 SELECT 不会让 stream 前进。一个 stream 只给一个 task 消费(官方 CREATE TASK)。
+- 入库过程第一步用 INSERT … SELECT 把 stream 里这一批变更写进 FILE_STATE,每个文件变更一行(覆盖是一删一增两行)。只 SELECT 不会让 stream 前进。一个 stream 只给一个 task 消费(官方 CREATE TASK)。
+- FILE_STATE 的 status 约定见 `sql/30_ingest.sql` 文件头:PENDING → READY(要解析、切分)→ DONE 或 FAILED。
 - 覆盖按 (路径, etag) 判断:删旧块、写新块。删除靠 stream 里的 DELETE 记录。
 - 不支持重命名。开了分层命名空间后,删目录只发 DirectoryDeleted、重命名只发 BlobRenamed,Snowflake 都不处理,块不会下线。所以只逐个删文件、不改名;万一做了,手动 `ALTER STAGE … REFRESH`。
 - 失败的文件留在 FILE_STATE,带错误原文和重试次数,不丢。Task 的 WHEN 只能用 SYSTEM$STREAM_HAS_DATA 这类函数、不能查表,所以失败文件不会自动重试;重试方式待定。
@@ -27,6 +28,7 @@
 - 没有空块;每篇解析成功的文档都有块;没有参考文献章节的块。数据检查各一项。
 - v1 的其余切分规则不默认带入,评测证明有用再加。
 - 切分逻辑只有一份(`sql/20_chunk.sql`),入库和评测实验都调它,参数来自 PIPELINE_CONFIG。
+- PIPELINE_CONFIG 里的配置一旦部署,参数就固定;要换参数就新建一个配置名,部署时会检查(`sql/10_config.sql`)。入库用 `is_active` 的那个,正好一个。
 
 ## 索引
 

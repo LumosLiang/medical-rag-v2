@@ -1,6 +1,6 @@
 # 现状
 
-2026-09-28 更新。以实际代码和实测为准;写"计划"的都还没做。
+2026-09-28 更新。以实际代码和实测为准;写"计划"的都还没做。每个环节留给用户的空及其状态见 `docs/hands-on.md`,这里只记骨架和对象的状态。
 
 | 组件 | 状态 | 说明 |
 |---|---|---|
@@ -17,11 +17,11 @@
 | stage、stream `sql/04_stage.sql` | 已实现待验证 | 已写,没执行;要和 `31_task` 一起加进部署入口,避免 stream 空放过期 |
 | task | 计划 | |
 | FILE_STATE、PARSED_DOCS、CHUNKS | 计划 | |
-| 切分过程 `sql/20_chunk.sql` | 计划 | 由用户写 |
-| 入库过程 `sql/30_ingest.sql` | 计划 | 其中按 (路径, etag) 判断新增、覆盖、删除并替换块的一段由用户写 |
+| 切分过程 `sql/20_chunk.sql` | 计划 | 切分本身是环节 5A |
+| 入库过程 `sql/30_ingest.sql` | 计划 | 消费 stream、判断变更、解析是环节 2A、2B、3A |
 | Cortex Search 服务 | 计划 | |
 | 数据检查 `RUN_DATA_CHECKS` | 计划 | |
-| 评测 `RUN_EVAL` | 计划 | evidence 匹配函数 `eval/10_match.sql` 由用户写 |
+| 评测 `RUN_EVAL` | 计划 | evidence 匹配 `eval/10_match.sql` 等见 `docs/hands-on.md` 环节 9 |
 | 标注集 | 计划 | 先 30 题,再扩到 60 题以上 |
 | 检索、生成模块,FastAPI、Streamlit | 计划 | |
 | SPCS 部署 | 计划 | |

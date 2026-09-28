@@ -42,6 +42,15 @@ INSERT INTO OPS.DEPLOY_LOG (deploy_id, branch, commit_sha, status, started_at, d
 -- 按编号执行,写法:EXECUTE IMMEDIATE FROM './<文件>';
 -- 04_stage.sql 要和 31_task.sql 一起加进来:stream 建好后,没人消费、也没人调用 SYSTEM$STREAM_HAS_DATA,
 -- 14 天后就可能过期(见 docs/pitfalls.md)。它要的 USING 参数见 04_stage.sql 的文件头。
+-- 有空没写(docs/hands-on.md)也能部署:没写的地方只在被调用时抛 NOT_IMPLEMENTED。
+EXECUTE IMMEDIATE FROM './10_config.sql';
+EXECUTE IMMEDIATE FROM './11_tables.sql';
+EXECUTE IMMEDIATE FROM './20_chunk.sql';
+EXECUTE IMMEDIATE FROM './30_ingest.sql';
+
+-- 上面的文件会切换 schema,这里切回来。
+USE DATABASE MEDRAG;
+USE WAREHOUSE MEDICAL_RAG_INDEX_WH;
 
 UPDATE OPS.DEPLOY_LOG
   SET status = 'SUCCEEDED', finished_at = CURRENT_TIMESTAMP()

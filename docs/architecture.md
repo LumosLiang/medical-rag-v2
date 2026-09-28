@@ -53,7 +53,7 @@ Snowflake 账户在 AWS 东京,文件在 Azure。官方写明,directory table �
 - 外部 stage 指向容器里的 `pdf/`,开 directory table 和自动刷新。
 - stream 建在这个 stage 上,记录 directory table 里文件的新增和删除。
 - Task 用 `WHEN SYSTEM$STREAM_HAS_DATA(...)` 触发。空闲时这个检查本身能防止 stream 过期;积压超过 14 天仍会过期,要监控 STALE_AFTER。Triggered task 12 小时没运行时,Snowflake 会安排一次健康检查(官方,时间不保证)。不设 SCHEDULE 能不能触发,是先验证的第 2 项。
-- 入库过程第一步用 INSERT … SELECT 把这一批变更写进 FILE_STATE(每个文件一行:路径、etag、状态、错误、重试次数)。stream 只有被 DML 消费才会前进,只 SELECT 不算。然后逐个文件处理:
+- 入库过程第一步用 INSERT … SELECT 把这一批变更写进 FILE_STATE(每个文件变更一行:路径、etag、动作、状态、错误、重试次数;覆盖是一删一增两行)。stream 只有被 DML 消费才会前进,只 SELECT 不算。然后逐个文件处理:
   - 新文件:解析、切分、写块。
   - 覆盖(同一路径、新 etag):删旧块,写新块。
   - 删除:删块,文档下线。

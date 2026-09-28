@@ -2,7 +2,7 @@
 
 医学文献 RAG,建在 Snowflake 上。Azure 上新增、覆盖、删除 PDF 后,Snowflake 自动完成解析、切分和上下线;Cortex Search 检索;AI_COMPLETE 生成带引用的回答;FastAPI 和 Streamlit 部署到 SPCS。
 
-架构见 `docs/architecture.md`,取舍和出处见 `docs/decisions.md`,踩过和已知的坑见 `docs/pitfalls.md`。在本仓库里改东西之前先读 `AGENTS.md`。
+架构见 `docs/architecture.md`,取舍和出处见 `docs/decisions.md`,踩过和已知的坑见 `docs/pitfalls.md`,每个环节留给用户动手的部分见 `docs/hands-on.md`。在本仓库里改东西之前先读 `AGENTS.md`。
 
 ## 现状
 

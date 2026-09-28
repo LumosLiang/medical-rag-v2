@@ -26,3 +26,6 @@ scripts/.cache/
 
 # macOS
 .DS_Store
+
+# IDE 在仓库里生成的本地文件(计划等)
+.snowflake/

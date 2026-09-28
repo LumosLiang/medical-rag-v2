@@ -21,6 +21,11 @@
 - 涉及检索质量的改动:`RUN_EVAL` 的 run_id 和结论。
 - 写完不等于在 Snowflake 里跑过,汇报时分开说。
 
+## 留空(`docs/hands-on.md`)
+
+- 搭骨架的改动:`grep -rn "你来写" sql eval app scripts` 列出的空和 `docs/hands-on.md` 的清单一一对应;空都没写时部署仍能执行;调用到没写的空,抛出的是 `NOT_IMPLEMENTED`,不是别的错。
+- 用户填完一个空:按它在 `docs/hands-on.md` 里的验收逐条跑,汇报跑了哪几条、结果是什么;再把表里的状态改成"完成"。
+
 ## Python(`app/`)
 
 - CI 里的 pytest 通过。测试用假的检索和生成模块,不连 Snowflake。
