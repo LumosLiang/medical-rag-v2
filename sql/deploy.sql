@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS OPS.DEPLOY_LOG (
 )
 COMMENT = 'medrag v2: one row per deploy from the Git repository object';
 
-SET deploy_id = UUID_STRING();
+-- SET 不接受 UUID_STRING() 这类不固定的表达式,要包一层子查询(见 docs/pitfalls.md)。
+SET deploy_id = (SELECT UUID_STRING());
 
 -- 执行的文件来自 FETCH 之后 main 指向的提交。
 SHOW GIT BRANCHES LIKE 'main' IN GIT REPOSITORY OPS.REPO;
