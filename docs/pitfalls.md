@@ -57,7 +57,8 @@
 
 - 【实测】2026-09-28。API 集成的 ALLOWED_AUTHENTICATION_SECRETS 引用的 secret 必须已经存在,否则编译就报 "does not exist or not authorized"。先建 secret,再建 API 集成。
 - 【实测】2026-09-28。DESCRIBE API INTEGRATION 的结果里没有 ALLOWED_AUTHENTICATION_SECRETS 这一行,用 owner 查也没有。核对不了放行的是哪个 secret,只能看建集成时的 SQL。
-- 【实测】2026-09-28。CREATE GIT REPOSITORY 连私有仓库时先报 "Operation clone is not permitted by server",后来又报 "Operation 'clone' is not authorized"。两次 Snowflake 这边的集成和 secret 都没动,用户在 GitHub 上调整 token 后成功。所以先查 token:fine-grained token 要选中这个仓库,Contents 设为 Read-only;重新生成 token 后旧值立刻作废,secret 要跟着 `ALTER SECRET ... SET PASSWORD`。官方排查页(Troubleshooting Git in Snowflake)的说法相同。
+- 【实测】2026-09-28。在 GitHub 上重新生成 token 后旧值立刻作废;secret 里还是旧值时,CREATE GIT REPOSITORY 报 "Operation 'clone' is not authorized"。用 `ALTER SECRET ... SET PASSWORD` 换成新值后成功。重新生成 token 就要跟着改 secret。
+- 【待验证】第一次建时报的是另一句 "Operation clone is not permitted by server",原因没有单独确认。报错和上一条不同,推断是 token 有效但看不到这个仓库或缺 Contents 权限。官方排查页(Troubleshooting Git in Snowflake)也说先查凭证,fine-grained token 要给 Contents 只读。
 - 【待验证】自测 token 不用把 token 交给别人:`curl -s -o /dev/null -w '%{http_code}\n' -u <GitHub 用户名> https://api.github.com/repos/<owner>/<repo>/contents/README.md`,提示时输入 token(不显示,也不进 shell 历史)。按 GitHub REST API 的约定:200 能读,401 token 值无效,404 看不到这个仓库,403 缺权限。
 
 ## 本机工具
