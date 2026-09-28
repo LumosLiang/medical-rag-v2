@@ -51,6 +51,10 @@
 - 【文档】ADLS Gen2 也要用 blob.core.windows.net 端点;stage URL 要以 `/` 结尾。
 - 【文档】azurerm provider v5 默认不自动注册资源提供程序,要在 provider 里列出用到的(本项目是 Microsoft.Storage 和 Microsoft.EventGrid)。
 
+## 本机工具
+
+- 【待验证】snow CLI 用 OAUTH_AUTHORIZATION_CODE 登录时,如果连接配置里的 account 含大写字母,会报 "Oauth code flow requirement 'client_id' is empty"。原因(从 connector 4.7.1 代码推断):它用 host 拼出授权地址,再把解析出的主机名(已转成小写)和 host 原样比较,大小写不一致就认为 OAuth 服务方不是 Snowflake,不用内置的 LOCAL_APPLICATION 凭据。account 改成小写,或执行时用 `--account` 传小写,应该就能走通。
+
 ## 方法论
 
 - 【v1 实测】20 道题分不出 10 个点的差异(10 个点就是 2 道题)。同一批数据重跑,R@5 会从 0.80 变成 0.85:检索排序不完全确定。
