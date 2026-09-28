@@ -15,8 +15,8 @@ CREATE OR REPLACE PROCEDURE CORE.CHUNK_DOC(
 )
 RETURNS NUMBER
 LANGUAGE SQL
-EXECUTE AS OWNER
 COMMENT = 'medrag v2: chunk one parsed file version with one config into the target table'
+EXECUTE AS OWNER
 AS
 $$
 DECLARE

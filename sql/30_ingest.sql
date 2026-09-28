@@ -18,8 +18,8 @@ USE DATABASE MEDRAG;
 CREATE OR REPLACE PROCEDURE INGEST.RUN_INGEST()
 RETURNS VARCHAR
 LANGUAGE SQL
-EXECUTE AS OWNER
 COMMENT = 'medrag v2: ingest entry called by the task; consume the stream, plan the batch, parse and chunk READY files'
+EXECUTE AS OWNER
 AS
 $$
 DECLARE
@@ -100,8 +100,8 @@ $$;
 CREATE OR REPLACE PROCEDURE INGEST.PLAN_BATCH(p_batch_id VARCHAR)
 RETURNS VARCHAR
 LANGUAGE SQL
-EXECUTE AS OWNER
 COMMENT = 'medrag v2: decide per file change whether it is new, overwritten or deleted; remove superseded chunks; mark rows READY'
+EXECUTE AS OWNER
 AS
 $$
 DECLARE
@@ -138,8 +138,8 @@ $$;
 CREATE OR REPLACE PROCEDURE INGEST.PARSE_FILE(p_relative_path VARCHAR, p_etag VARCHAR, p_config_name VARCHAR)
 RETURNS VARCHAR
 LANGUAGE SQL
-EXECUTE AS OWNER
 COMMENT = 'medrag v2: parse one file version with AI_PARSE_DOCUMENT into PARSED_DOCS; skips versions already parsed'
+EXECUTE AS OWNER
 AS
 $$
 DECLARE
