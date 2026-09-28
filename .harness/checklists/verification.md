@@ -28,4 +28,4 @@
 
 ## 当前基线
 
-骨架阶段:还没有 SQL 和 Python 代码,也没有测试。CI 只有两项检查:禁止内容扫描、Terraform 格式和校验。
+有引导 SQL(`sql/00`–`03`,已执行)和部署入口 `sql/deploy.sql`;还没有 Python 代码,也没有测试。CI 只有两项检查:禁止内容扫描、Terraform 格式和校验。

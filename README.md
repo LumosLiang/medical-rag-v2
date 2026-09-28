@@ -13,7 +13,7 @@
 | 目录 | 内容 |
 |---|---|
 | `infra/azure/` | Azure 资源的 Terraform:存储账户(ADLS Gen2)、容器、事件队列、Event Grid、给 Snowflake 的角色分配 |
-| `sql/` | Snowflake 对象,按编号顺序执行(计划) |
+| `sql/` | Snowflake 对象。00–03 是引导文件,新环境里手动执行一次;之后的由部署入口 `deploy.sql` 按编号执行 |
 | `eval/` | 标注集和评测过程(计划) |
 | `app/` | 检索和生成模块、FastAPI、Streamlit、测试、镜像、SPCS 规格(计划) |
 | `scripts/` | 提交前检查;一次性语料脚本(计划) |
@@ -34,5 +34,8 @@
 2. Snowflake:`sql/01_integrations.sql` 建存储集成和通知集成;在 Azure 租户里对两者 consent。(已完成)
 3. Azure 第二阶段:填入两个 service principal 的对象 ID,再 apply 角色分配和事件订阅。(已完成)
 4. Snowflake:`sql/00_role.sql` 建专用角色 MEDRAG_ADMIN 和 MEDRAG 库,再执行一次 `sql/01_integrations.sql` 把两个集成的 USAGE 授给它,然后 `sql/02_schemas.sql`。新环境从头部署时按 00、01、02 的顺序执行。(已完成)
-5. Snowflake:用户建只读 GitHub token 的 secret,再执行 `sql/03_git_repo.sql` 建 Git 仓库对象;之后的 SQL 都从仓库执行:先推送,再 `ALTER GIT REPOSITORY MEDRAG.OPS.REPO FETCH`,再 `EXECUTE IMMEDIATE FROM @MEDRAG.OPS.REPO/branches/main/sql/<文件>`。(已完成)
+5. Snowflake:用户建只读 GitHub token 的 secret,再执行 `sql/03_git_repo.sql` 建 Git 仓库对象。(已完成)
+
+之后改了 SQL,都从 Git 仓库对象部署:先推送,再 `ALTER GIT REPOSITORY MEDRAG.OPS.REPO FETCH`,再 `EXECUTE IMMEDIATE FROM @MEDRAG.OPS.REPO/branches/main/sql/deploy.sql`(用 MEDRAG_ADMIN;要传的值见文件头)。每次部署在 `MEDRAG.OPS.DEPLOY_LOG` 记一行提交 sha。
+
 6. 先验证三项(见 `docs/decisions.md`),再写入库过程。

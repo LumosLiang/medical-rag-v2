@@ -37,8 +37,10 @@
 - 【v1 实测】COMMENT 只能是一个字符串字面量,不能拼接。
 - 【文档】Task 的 WHEN 只支持 SYSTEM$STREAM_HAS_DATA、SYSTEM$GET_PREDECESSOR_RETURN_VALUE、布尔运算和比较运算,不能查表(官方 CREATE TASK)。
 - 【文档】一个 stream 只应被一个 task 消费;只 SELECT 不会让 stream 前进(官方 CREATE TASK、Introduction to streams)。
+- 【文档】stream 建好后,既没被 DML 消费、也没被 SYSTEM$STREAM_HAS_DATA 调用(stream 为空时),最多 14 天(MAX_DATA_EXTENSION_TIME_IN_DAYS 的默认值)后可能过期;过期后只能重建,没消费的变化就丢了(官方 Introduction to streams)。所以 stream 和消费它的 task 在同一次部署里建。
 - 【文档】EXECUTE IMMEDIATE FROM 的模板访问不了 Git 仓库里的其它文件(include、import 不行);嵌套执行最多 5 层;单个文件不超过 10MB。
 - 【文档】EXECUTE IMMEDIATE FROM 执行到某条失败就停,返回那条的报错;前面的语句已经生效,不回滚(官方 EXECUTE IMMEDIATE FROM)。所以每个 SQL 文件都要能重复执行。
+- 【文档】带 `--!jinja` 的文件整份按 Jinja 渲染,SQL 注释也不例外;模板里用到、但 USING 没传的变量直接报 UndefinedError(官方 EXECUTE IMMEDIATE FROM)。注释里不要写花括号。
 
 ## Azure 和外部 stage
 
@@ -48,6 +50,7 @@
 - 【文档】directory table 自动刷新只由 BlobCreated 和 BlobDeleted 触发。ADLS Gen2 上要有 FlushWithClose 才算提交,只有 CreateFile 不会刷新。重命名不触发。
 - 【文档】开了分层命名空间后,删目录只发 DirectoryDeleted,重命名只发 BlobRenamed,Snowflake 都不处理:这些文件的块不会下线。
 - 【文档】stage 里 NOTIFICATION_INTEGRATION 的名字必须全大写。建完 directory table 先手动 REFRESH 一次,否则要等第一条事件才有数据。
+- 【文档】CREATE STAGE 的 REFRESH_ON_CREATE 默认是 TRUE,建 stage 时就把已有文件登记进 directory table;而 stream 只记录它建好之后的变化(官方 CREATE STAGE、CREATE STREAM)。先建 stage 再建 stream,已有文件就不会进入库流程。所以建 stage 时设 FALSE,建好 stream 再 REFRESH(`sql/04_stage.sql`)。
 - 【文档】Snowflake 只支持 Event Grid 事件格式,不支持 CloudEvents。
 - 【文档】一个 Storage Queue 只能给一个通知集成;多个集成共用一个队列会丢消息。排查时只用 peek,get 会让消息暂时不可见。
 - 【文档】ADLS Gen2 也要用 blob.core.windows.net 端点;stage URL 要以 `/` 结尾。
