@@ -6,7 +6,7 @@
 
 ## 现状
 
-骨架阶段:仓库结构、文档、检查规则已就位;Azure 第一阶段资源(存储账户、容器、队列、Event Grid system topic)已建好;Snowflake 对象还没建。逐项状态见 `.harness/context/current-state.md`。
+骨架阶段:仓库结构、文档、检查规则已就位;Azure 第一阶段资源(存储账户、容器、队列、Event Grid system topic)已建好;Snowflake 的存储集成和通知集成已建好,Azure 那边的权限还没给。逐项状态见 `.harness/context/current-state.md`。
 
 ## 目录
 

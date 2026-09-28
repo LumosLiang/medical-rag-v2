@@ -8,8 +8,8 @@
 | 提交前检查 | 已实现 | 禁止内容扫描、Terraform 格式和校验;本机提交前跑一次,推送后 GitHub Actions 再跑一次 |
 | Azure 的 Terraform 代码 | 已实现 | 第一阶段已 apply;第二阶段(角色分配、事件订阅)的代码未经 apply 验证 |
 | Azure 资源(第一阶段) | 已验证 | 2026-09-28 建成:资源组、存储账户(ADLS Gen2)、容器、队列、system topic。已核对实际设置;apply 后 plan 无差异 |
-| Azure 资源(第二阶段) | 计划 | 等两个集成 consent、service principal 出现 |
-| Snowflake 存储集成、通知集成 | 已实现待验证 | `sql/01_integrations.sql` 已写,等用户批准执行 |
+| Azure 资源(第二阶段) | 计划 | 存储这边的 service principal 已在租户里;通知这边等用户 consent、service principal 出现 |
+| Snowflake 存储集成、通知集成 | 已实现 | 2026-09-28 用 `sql/01_integrations.sql` 建成,两者 ENABLED。还没有 Azure 权限,读文件和队列要等第二阶段 |
 | Git 仓库对象和部署入口 | 计划 | |
 | stage、stream、task | 计划 | |
 | FILE_STATE、PARSED_DOCS、CHUNKS | 计划 | |
@@ -31,4 +31,4 @@
 
 - 失败文件怎么重试:Task 的 WHEN 不能查表,失败文件不会自动重试。写入库过程时定,可以加一个低频定时的重试 task,也可以手动调用。
 - 代码检查什么时候从"本机加推送后 CI"改成"PR 上 CI 通过才合并":`app/` 有代码后再定。
-- 本机的 snow CLI 还不能用:连接配置里 account 是大写,connector 判断"Snowflake 是不是 OAuth 服务方"时主机名大小写对不上,不走内置的 LOCAL_APPLICATION,报 client_id 为空(从 connector 代码推断,待验证)。
+- 本机的 snow CLI:连接配置里 account 是大写,直接用会报 client_id 为空;执行时用 `--account` 传小写可以登录(已实测)。要不要把配置里的 account 改成小写,由用户定。

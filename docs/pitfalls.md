@@ -42,6 +42,7 @@
 ## Azure 和外部 stage
 
 - 【文档】consent 之后,service principal 可能要一小时以上才出现。存储集成和通知集成是两个不同的 service principal。删掉 service principal,对应的集成就失效。
+- 【实测】2026-09-28。同一个 Snowflake 账户里的存储集成共用同一个 Azure 应用:新建的存储集成和账户里已有的存储集成 AZURE_MULTI_TENANT_APP_NAME 相同,service principal 在租户里已经存在,不用再等。通知集成是另一个应用,账户里第一次建时要重新 consent。
 - 【文档】角色分配最多 5 分钟生效。Snowflake 会缓存临时凭据,撤权后最长 60 分钟内仍能读。
 - 【文档】directory table 自动刷新只由 BlobCreated 和 BlobDeleted 触发。ADLS Gen2 上要有 FlushWithClose 才算提交,只有 CreateFile 不会刷新。重命名不触发。
 - 【文档】开了分层命名空间后,删目录只发 DirectoryDeleted,重命名只发 BlobRenamed,Snowflake 都不处理:这些文件的块不会下线。
@@ -53,7 +54,7 @@
 
 ## 本机工具
 
-- 【待验证】snow CLI 用 OAUTH_AUTHORIZATION_CODE 登录时,如果连接配置里的 account 含大写字母,会报 "Oauth code flow requirement 'client_id' is empty"。原因(从 connector 4.7.1 代码推断):它用 host 拼出授权地址,再把解析出的主机名(已转成小写)和 host 原样比较,大小写不一致就认为 OAuth 服务方不是 Snowflake,不用内置的 LOCAL_APPLICATION 凭据。account 改成小写,或执行时用 `--account` 传小写,应该就能走通。
+- 【实测】2026-09-28。snow CLI 用 OAUTH_AUTHORIZATION_CODE 登录时,如果连接配置里的 account 含大写字母,会报 "Oauth code flow requirement 'client_id' is empty"。connector 4.7.1 用 host 拼出授权地址,再把解析出的主机名(已转成小写)和 host 原样比较,大小写不一致就不用内置的 LOCAL_APPLICATION 凭据。执行时用 `--account` 传小写就能登录。
 
 ## 方法论
 
