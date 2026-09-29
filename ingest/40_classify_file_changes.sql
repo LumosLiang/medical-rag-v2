@@ -20,12 +20,16 @@ DECLARE
   pending_left    EXCEPTION (-20131, 'CLASSIFY_CHANGES: some rows are still PENDING; every PENDING row must get a new status');
 BEGIN
   -- 最简版:只按 stream 的动作分。新增(含覆盖后的新版本)去解析,删除(含被覆盖的旧版本)去删块。
-  -- 不重试 FAILED,不处理特殊情况;跑通后可以重写这一步(docs/hands-on.md 环节 2B)。
+  -- 不重试 FAILED,不处理特殊情况;跑通后可以重写这一步(docs/roadmap.md)。
+  -- iff --> if/else
+  -- status = "TO_REMOVE" if change_action = 'DELETE' else "TO_PARSE"
+
   UPDATE INGEST.FILE_CHANGES
      SET status = IFF(change_action = 'DELETE', 'TO_REMOVE', 'TO_PARSE'),
          updated_at = CURRENT_TIMESTAMP()
    WHERE status = 'PENDING';
 
+  -- 算一把剩下的pending的行数
   SELECT COUNT(*) INTO :v_pending_left
     FROM INGEST.FILE_CHANGES
    WHERE status = 'PENDING';

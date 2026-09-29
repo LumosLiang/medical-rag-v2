@@ -1,36 +1,18 @@
-# 交付前检查清单
+# 当前交付检查
 
-说"做完了"之前,按改动类型跑下面的检查。汇报时,都过了就一句话带过;只列没过的,以及没跑的和原因。
+## 本地
 
-## 所有改动
+```sh
+bash scripts/check_forbidden.sh
+git diff --check
+terraform -chdir=infra/azure fmt -check main.tf variables.tf outputs.tf versions.tf
+terraform -chdir=infra/azure validate
+```
 
-- `bash scripts/check_forbidden.sh`:仓库里没有本机路径、账户地址、密钥,也没有 Terraform 状态和变量文件。账号相关的具体值(账户标识、连接名、租户和订阅 ID、存储账户名等)写在本机的 `.harness/local/forbidden-patterns.txt`(每行一个正则,不进仓库),脚本会一起检查;CI 里可以通过 `EXTRA_FORBIDDEN_PATTERNS` secret 传入。
-- `git status --short`、`git diff --check`:改动范围对,没有多余文件。
-- 文档里引用的路径和文件都存在。
+再看 git status、部署顺序、调用方和文档链接。实验语句保留为注释；用户未填写的核心步骤仍留空。
 
-## Terraform(`infra/azure/`)
+## Snowflake
 
-- `terraform fmt -check -recursive`、`terraform validate`。
-- 贴出 `terraform plan` 的变更摘要。apply 要用户批准。
-- plan 通过不等于资源建好了;apply 之后用 `terraform output` 和 Azure 上的实际状态核对。
+写完和运行通过分开报告。只对已实现的步骤验收：捕获后 stream 前进，解析表有结果且页数正确，重复解析返回 SKIPPED；切分写完再验空块、重复 ID、token 超限和重复调用。
 
-## Snowflake SQL(`setup/`、`ingest/`、`eval/` 等)
-
-- 通过 Git 仓库对象从这次提交执行过(`EXECUTE IMMEDIATE FROM`),记下提交的 sha。
-- 入库相关的改动:`RUN_DATA_CHECKS` 全部通过。
-- 涉及检索质量的改动:`RUN_EVAL` 的 run_id 和结论。
-- 写完不等于在 Snowflake 里跑过,汇报时分开说。
-
-## 留空(`docs/hands-on.md`)
-
-- 搭骨架的改动:`grep -rn "你来写" ingest spike eval app scripts` 列出的空和 `docs/hands-on.md` 的清单一一对应;空都没写时部署仍能执行;调用到没写的空,抛出的是 `NOT_IMPLEMENTED`,不是别的错。
-- 用户填完一个空:按它在 `docs/hands-on.md` 里的验收逐条跑,汇报跑了哪几条、结果是什么;再把表里的状态改成"完成"。
-
-## Python(`app/`)
-
-- CI 里的 pytest 通过。测试用假的检索和生成模块,不连 Snowflake。
-- 单元测试通过不等于在 SPCS 上跑通。
-
-## 当前基线
-
-有引导 SQL(`setup/`,已执行)、部署入口 `deploy.sql` 和入库骨架 `ingest/`;还没有 Python 代码,也没有测试。CI 只有两项检查:禁止内容扫描、Terraform 格式和校验。
+正式部署由用户提交推送后从 Git 仓库对象执行，核对 DEPLOY_LOG 的 sha 和 SUCCEEDED。未运行就写待验证；需要浏览器登录时等用户操作。RUN_DATA_CHECKS、RUN_EVAL 尚未实现，当前不要求执行。

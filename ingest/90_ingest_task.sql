@@ -1,6 +1,5 @@
 -- 入库 task:stream 有数据时调用 INGEST.RUN_INGEST()(80_run_ingest.sql)。
--- 写完之后加进 deploy.sql(在 20_corpus_stage_and_stream.sql 后面)。建好的 task 是暂停的;RESUME 之后才会跑,
--- 一跑就会解析、花钱,RESUME 之前先说一声。
+-- 写完之后加进 deploy.sql(在 80_run_ingest.sql 后面)。建好的 task 是暂停的,RESUME 之后才会跑。
 
 USE ROLE MEDRAG_ADMIN;
 USE SCHEMA MEDRAG.INGEST;

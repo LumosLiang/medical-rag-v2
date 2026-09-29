@@ -1,103 +1,28 @@
-# 坑
+# 当前需要的坑
 
-所有坑只写在这一份;代码文件头只放指向这里的指针。按后果分类,因为查坑的时候通常是先看到了某个症状。
+以下实测来自既有项目记录，未在本次全部复现；其余以官方参考为准。
 
-- 【v1 实测】来自第一版(库 MEDICAL_RAG)实际运行。
-- 【文档】来自官方文档,本项目还没有实测。
-- 【待验证】是推断,还没有出处或实测。
+## 已遇到
 
-## 静默失败:不报错,结果是错的
+- directory table 的 etag 本身包含双引号；传入 PARSE_FILE 时保留原值，不能手动去掉，否则会成为另一个版本键。（2026-09-29 远程核对）
 
-- 【v1 实测】进索引的块超过 512 token,向量那一路被截断,关键词那一路仍用全文。按官方示例 2000 字符切,39.6% 的块超标。
-- 【v1 实测】AI_COUNT_TOKENS 对 embedding 模型返回 NULL,不报错。用 `SNOWFLAKE.CORTEX.COUNT_TOKENS`。
-- 【v1 实测】PRIMARY KEY 不强制唯一;Cortex Search 里主键重复的行被静默忽略。每次切完都要查重复数。
-- 【v1 实测】RLIKE / REGEXP_LIKE 是整串匹配,模式两头要加 `.*`。不支持 `(?s)`、`(?i)` 这类内联标志,改用第三个参数 `'s'` 和 `LOWER()`。
-- 【v1 实测】检索结果里没有 `score` 字段,分量分数在 `"@scores"` 下,键要加引号;reranker 只给前约 16 条打分。
-- 【v1 实测】存储过程里的嵌套游标,内层第一轮就耗尽,之后静默返回空。改成在一个游标里做叉积。
-- 【v1 实测】游标定义里看不到过程参数;报错发生在 FOR 展开时,前面的 INSERT 已经提交。
-- 【v1 实测】从结果表出发算指标,会丢掉一条结果都没返回的题,指标变好看。要从题目表出发。
-- 【v1 实测】LAYOUT 解析会把页眉页脚插进正文句子中间(抽 20 块有 11 块)。影响关键词匹配,也影响 evidence 匹配。
-- 【v1 实测】LIST 返回 No data 不代表没权限,前缀不存在也是这个结果。判断能不能读,要拿一个确定存在的文件对照。
-- 【v1 实测】自己算问题向量时(比如暴力检索对照),arctic-embed-l-v2.0 的查询前缀是 `"query: "`(模型卡)。误用 v1.x 的长前缀,MRR 掉 0.21。用 Cortex Search 时由服务内部加前缀,不用管。
+- directory table / stream 的 LAST_MODIFIED 是 TIMESTAMP_TZ，写进 FILE_CHANGES 要显式转 TIMESTAMP_LTZ。（2026-09-29 实测）
+- Queue 的 Message Processor 角色建 AUTO_REFRESH stage 报 403；改成队列范围的 Storage Queue Data Contributor 后通过。（2026-09-28 实测）
+- 解析不要放入会重复引用的 CTE；先调用一次保存结果，再展开。（v1 实测）第三个参数 TRUE 返回顶层 value、error、metadata；页数从 metadata.pageCount 取。[官方](https://docs.snowflake.com/en/sql-reference/functions/ai_parse_document)。
+- AI_COUNT_TOKENS 对当前 embedding 模型返回 NULL，使用 SNOWFLAKE.CORTEX.COUNT_TOKENS。（v1 实测）
+- 表的 PRIMARY KEY 不强制唯一，chunk_id 需要自己检查；每块最多 512 token。（v1 实测）
+- CREATE PROCEDURE 的 COMMENT 放在 EXECUTE AS 前；过程签名改变会留下旧重载。（既有实测）改签名先讨论，不直接 DROP。
+- SET UUID_STRING 要包 SELECT 子查询；部署模板连 SQL 注释也会渲染，注释不要写未传入的 Jinja 变量。（既有部署实测）
+- Git API 集成引用的 secret 必须先存在；token 换了，Snowflake secret 也要同步。（2026-09-28 实测）
+- CLI 的 OAuth 连接 account 含大写曾导致 client_id 为空；执行时传小写。未开 token 缓存时每次需要浏览器登录。（2026-09-28 实测，不擅自改连接设置）
 
-## 花钱的
+## 保留的限制
 
-- 【v1 实测】AI_PARSE_DOCUMENT 按页计费。不要放进 CTE:优化器会内联,函数被重复调用、重复计费(同一份 2 页文件从 10.3 秒变成 27.8 秒)。先落表再展开。
-- 【v1 实测】FLATTEN 展开 pages 时不加 `OUTER => TRUE`,解析失败的文档会丢,下次又重新解析一遍。
-- 【v1 实测】改 Cortex Search source query 的 schema 会触发全量重新 embedding。列要在建服务前一次加齐。
-- 【v1 实测】serving 按数据量持续计费,没人查询也照收。设 `AUTO_SUSPEND`(最小 1800 秒)。
-- 【待验证】对块表 CREATE OR REPLACE 会让 Cortex Search 只能全量重刷。块表只用增量 DML。
+- 先建 stage（REFRESH_ON_CREATE=FALSE），再建 stream，再 REFRESH，避免已有文件漏进入库流程。已部署表只改 CREATE TABLE 不会增加列，需 ALTER。
+- 自动刷新只处理支持的 BlobCreated / BlobDeleted 和 Event Grid schema；逐个删文件，不重命名、不删目录。[官方](https://docs.snowflake.com/en/user-guide/data-load-dirtables-auto-azure)。
+- 一个队列只给一个通知集成，排错只 peek；ADLS stage 仍使用 blob 端点。NOTIFICATION_INTEGRATION 名字写大写。[官方](https://docs.snowflake.com/en/user-guide/data-load-dirtables-auto-azure)。
+- stream 只 SELECT 不前进；保留期看 STALE_AFTER。当前 task 未实现，不能假定 stream 会被自动维护。[官方](https://docs.snowflake.com/en/user-guide/streams-intro)。
+- EXECUTE IMMEDIATE FROM 中途失败，前面已执行的语句不回滚；DEPLOY_LOG 会停在 STARTED。实验 CALL 不能随部署运行。[官方](https://docs.snowflake.com/en/sql-reference/sql/execute-immediate-from)。
+- 切分开启事务后出错会回滚，未写的 CHUNK_DOC 会抛 NOT_IMPLEMENTED；暂不调用 RUN_INGEST 验收整条链路。
 
-## 编译期和权限限制
-
-- 【v1 实测】SEARCH_PREVIEW 的两个参数都必须是编译期常量,SQL UDF 包不了动态参数的检索;响应体上限 300KB。Python 里直接用 snowflake.core 的 search 接口。
-- 【v1 实测】owner's rights 的存储过程里读不了 INFORMATION_SCHEMA 里和当前用户有关的信息。
-- 【v1 实测】改存储过程签名要先 DROP;CREATE OR REPLACE 会留下旧的重载。
-- 【v1 实测】存储过程里 SQLERRM 要写成 `:SQLERRM`;`:rec.字段` 不合法,先赋给局部变量。
-- 【v1 实测】COMMENT 只能是一个字符串字面量,不能拼接。
-- 【实测】2026-09-28。`SET x = UUID_STRING();` 报 "Unsupported feature 'assignment from non-constant source expression'";包一层子查询 `SET x = (SELECT UUID_STRING());` 可以。
-- 【实测】2026-09-28。CREATE PROCEDURE 里 COMMENT 要写在 EXECUTE AS 前面,反过来报 "unexpected 'COMMENT'"。
-- 【文档】Task 的 WHEN 只支持 SYSTEM$STREAM_HAS_DATA、SYSTEM$GET_PREDECESSOR_RETURN_VALUE、布尔运算和比较运算,不能查表(官方 CREATE TASK)。
-- 【文档】一个 stream 只应被一个 task 消费;只 SELECT 不会让 stream 前进(官方 CREATE TASK、Introduction to streams)。
-- 【文档】stream 建好后,既没被 DML 消费、也没被 SYSTEM$STREAM_HAS_DATA 调用(stream 为空时),最多 14 天(MAX_DATA_EXTENSION_TIME_IN_DAYS 的默认值)后可能过期;过期后只能重建,没消费的变化就丢了(官方 Introduction to streams)。所以 stream 和消费它的 task 在同一次部署里建。
-- 【文档】EXECUTE IMMEDIATE FROM 的模板访问不了 Git 仓库里的其它文件(include、import 不行);嵌套执行最多 5 层;单个文件不超过 10MB。
-- 【文档】EXECUTE IMMEDIATE FROM 执行到某条失败就停,返回那条的报错;前面的语句已经生效,不回滚(官方 EXECUTE IMMEDIATE FROM)。所以每个 SQL 文件都要能重复执行。
-- 【文档】带 `--!jinja` 的文件整份按 Jinja 渲染,SQL 注释也不例外;模板里用到、但 USING 没传的变量直接报 UndefinedError(官方 EXECUTE IMMEDIATE FROM)。注释里不要写花括号。
-
-## Azure 和外部 stage
-
-- 【文档】consent 之后,service principal 可能要一小时以上才出现。存储集成和通知集成是两个不同的 service principal。删掉 service principal,对应的集成就失效。
-- 【实测】2026-09-28。同一个 Snowflake 账户里的存储集成共用同一个 Azure 应用:新建的存储集成和账户里已有的存储集成 AZURE_MULTI_TENANT_APP_NAME 相同,service principal 在租户里已经存在,不用再等。通知集成是另一个应用,账户里第一次建时要重新 consent。
-- 【文档】角色分配最多 5 分钟生效。Snowflake 会缓存临时凭据,撤权后最长 60 分钟内仍能读。
-- 【实测】2026-09-28。队列上只给官方写的最小角色 Storage Queue Data Message Processor 时,建带 AUTO_REFRESH 的 stage 报 "Failed to set up auto refresh for stage directory. Could not access queue: <队列 URL> ... (Status Code:403; Error Code:AuthorizationPermissionMismatch)",stage 没建成。已排除两种可能:没分错 service principal(Snowflake 里通知集成用的应用,就是在队列上拿到角色的那个),也不是角色没生效(已经建了 8 小时)。Snowflake 社区针对这条报错的知识库文章要求给 Storage Queue Data Contributor,官方文档也把它列为可选角色。Message Processor 只有查看、接收、删除消息的数据权限;Snowflake 建 stage 时还做了什么操作,文档没写,缺的是哪一个权限是推断。改成 Contributor 之后(用户 apply),同一段 SQL 建成了 stage,自动刷新也能收到事件。
-- 【文档】directory table 自动刷新只由 BlobCreated 和 BlobDeleted 触发。ADLS Gen2 上要有 FlushWithClose 才算提交,只有 CreateFile 不会刷新。重命名不触发。
-- 【文档】开了分层命名空间后,删目录只发 DirectoryDeleted,重命名只发 BlobRenamed,Snowflake 都不处理:这些文件的块不会下线。
-- 【文档】stage 里 NOTIFICATION_INTEGRATION 的名字必须全大写。建完 directory table 先手动 REFRESH 一次,否则要等第一条事件才有数据。
-- 【文档】CREATE STAGE 的 REFRESH_ON_CREATE 默认是 TRUE,建 stage 时就把已有文件登记进 directory table;而 stream 只记录它建好之后的变化(官方 CREATE STAGE、CREATE STREAM)。先建 stage 再建 stream,已有文件就不会进入库流程。所以建 stage 时设 FALSE,建好 stream 再 REFRESH(`ingest/20_corpus_stage_and_stream.sql`)。
-- 【文档】Snowflake 只支持 Event Grid 事件格式,不支持 CloudEvents。
-- 【文档】一个 Storage Queue 只能给一个通知集成;多个集成共用一个队列会丢消息。排查时只用 peek,get 会让消息暂时不可见。
-- 【文档】ADLS Gen2 也要用 blob.core.windows.net 端点;stage URL 要以 `/` 结尾。
-- 【文档】azurerm provider v5 默认不自动注册资源提供程序,要在 provider 里列出用到的(本项目是 Microsoft.Storage 和 Microsoft.EventGrid)。
-
-## Git 仓库对象
-
-- 【实测】2026-09-28。API 集成的 ALLOWED_AUTHENTICATION_SECRETS 引用的 secret 必须已经存在,否则编译就报 "does not exist or not authorized"。先建 secret,再建 API 集成。
-- 【实测】2026-09-28。DESCRIBE API INTEGRATION 的结果里没有 ALLOWED_AUTHENTICATION_SECRETS 这一行,用 owner 查也没有。核对不了放行的是哪个 secret,只能看建集成时的 SQL。
-- 【实测】2026-09-28。在 GitHub 上重新生成 token 后旧值立刻作废;secret 里还是旧值时,CREATE GIT REPOSITORY 报 "Operation 'clone' is not authorized"。用 `ALTER SECRET ... SET PASSWORD` 换成新值后成功。重新生成 token 就要跟着改 secret。
-- 【待验证】第一次建时报的是另一句 "Operation clone is not permitted by server",原因没有单独确认。报错和上一条不同,推断是 token 有效但看不到这个仓库或缺 Contents 权限。官方排查页(Troubleshooting Git in Snowflake)也说先查凭证,fine-grained token 要给 Contents 只读。
-- 【待验证】自测 token 不用把 token 交给别人:`curl -s -o /dev/null -w '%{http_code}\n' -u <GitHub 用户名> https://api.github.com/repos/<owner>/<repo>/contents/README.md`,提示时输入 token(不显示,也不进 shell 历史)。按 GitHub REST API 的约定:200 能读,401 token 值无效,404 看不到这个仓库,403 缺权限。
-
-## 语料(PMC)
-
-PMC 的公开 S3 桶 `pmc-oa-opendata`。`scripts/fetch_sample_pdfs.py` 按下面这些条目取样。
-
-- 【v1 实测】按 PMC 编号倒序取最新:500 篇全是 2026 年、全是 CC BY;约 30% 不是医学期刊(Sensors (Basel) 占 24%,还有 Sports、Polymers),集中在 MDPI;50 道题里 7 道是兽医的。
-- 【v1 实测】桶里约 930 万个元数据对象,LIST 撑不住;COPY FILES 的 FILES 列表不剪枝,先列举整个 stage 位置再过滤,超过上限直接报错。
-- 【文档】不列举桶:先用 eSearch 查出 PMCID,再按 `PMC<编号>.` 前缀到 S3 取文件(桶里 README.txt 的 eSearch-S3 pipeline)。eSearch 一次最多返回 1 万条,候选更多时要把检索切小。
-- 【文档】桶里已经不按许可分目录(oa_comm、oa_noncomm 没有了,2026 年 8 月底旧文件也删完了)。许可只在每个版本的 JSON 的 license_code 里,eSearch 也有按许可的过滤器(官方 Accessing PMC Article Datasets Using AWS)。开放获取不等于能商用:v1 候选池里近四分之一的许可不允许商用。
-- 【文档】版本号大不代表该用哪个:同一篇可能同时有作者手稿和出版版,用 JSON 的 is_manuscript 区分;也不要假设 `.1` 一定存在(官方 FAQ)。v1 按最大版本号取,不对。
-- 【文档】JSON 里每个文件的地址都带 md5 参数,下载后能逐篇校验。S3 Inventory 只覆盖 `metadata/`,里面的 ETag 属于 JSON,不能拿来校验 PDF(v1 实测)。
-- 【v1 实测】撤稿论文仍在桶里,只有 JSON 的 is_retracted 标记。eSearch 可以用 `NOT hasretractionin` 先排掉(官方 PMC User Guide)。
-- 【v1 实测】JSON 里没有单独的发表日期,citation 字符串里只有年份可靠。精确日期看 XML 的 pub-date。
-- 【v1 实测】v1 语料里最大的 PDF 约 104 MB,超过 AI_PARSE_DOCUMENT 的单文件上限 100 MB。下载前用 HEAD 看大小。
-- 【实测】2026-09-28。eSearch 的 `[dp]` 会命中电子版早就发表、印刷或卷期日期才落进窗口的文章:Ann Med 第一个一年窗口里,抽到的前 7 篇有 5 篇电子版早于窗口起点。要按 XML 里最早的正式发表日期再核一遍。
-- 【实测】2026-09-28。开放获取、CC BY、有 PDF 三个过滤器都过了,JAMA Netw Open 近 5 年抽查的 51 篇全是作者手稿,S3 上没有出版版。过滤器按 PMCID 算,是不是出版版要看每个版本的 JSON。
-- 【实测】2026-09-28。没被 MEDLINE 收录的期刊,NLM 目录里没有学科分类(broadheading 为空),例如 EClinicalMedicine、J Clin Med、Front Med (Lausanne)、Vet Sci;Sensors (Basel) 的学科分类是 Biotechnology、Technology。按 NLM 学科分类判断是不是医学期刊时,这些都通不过。
-- 【实测】2026-09-28。开放获取的检索结果里混着来信、评论、简报,按 XML 的 article-type 排掉:这次抽到过 letter、article-commentary、brief-report 各一篇。
-- 【实测】2026-09-28。eSearch 对拼错的过滤器、查不到的带引号短语不报错,只在 errorlist、warninglist 里提示,返回 0 条。脚本要检查这两项。
-- 【实测】2026-09-28。不带 API key 调 E-utilities,请求间隔 0.4 秒仍然返回 429(官方限每秒 3 次)。间隔放到 0.7 秒,并在 429 时退避重试。
-
-## 本机工具
-
-- 【实测】2026-09-28。snow CLI 用 OAUTH_AUTHORIZATION_CODE 登录时,如果连接配置里的 account 含大写字母,会报 "Oauth code flow requirement 'client_id' is empty"。connector 4.7.1 用 host 拼出授权地址,再把解析出的主机名(已转成小写)和 host 原样比较,大小写不一致就不用内置的 LOCAL_APPLICATION 凭据。执行时用 `--account` 传小写就能登录。
-- 【实测】2026-09-28。不开 token 缓存时,snow CLI 每次连接都要在浏览器里重新登录,2 分钟内没完成就报 "Unable to receive the OAuth message within a given timeout",脚本什么都没执行。一次执行多个文件时,把文件拼起来用 `-i` 从标准输入传,只登录一次。
-- 【实测】2026-09-28。IDE 里一次执行多条语句时,只显示最后一条的结果,前面某条失败了也看不到:CREATE GIT REPOSITORY 失败了,显示的却是后面 FETCH 报"不存在"。关键 DDL 单条执行,或者放在最后一条。
-- 【实测】2026-09-28。IDE 连接会沿用上一次执行留下的角色:上一次切到了 ACCOUNTADMIN,下一次没写 USE ROLE 就还是 ACCOUNTADMIN。每次执行都以 USE ROLE 开头。
-
-## 方法论
-
-- 【v1 实测】20 道题分不出 10 个点的差异(10 个点就是 2 道题)。同一批数据重跑,R@5 会从 0.80 变成 0.85:检索排序不完全确定。
-- 【v1 实测】单标注会低估 Recall,pooling 会高估 Recall。所有配置低估的程度相同,所以配置之间的比较仍然成立。
-- 【v1 实测】MRR 只需要二值标注;nDCG 才需要分级标注。
-- 【v1 实测】SEARCH_PREVIEW 的延迟不是生产延迟,但两个配置走同一条路时,差值仍然可比。
-- 【v1 实测】实体类、带过滤类问题对混合检索太容易,分不出配置好坏。加题往关键词和语义类上加。
+参考文献、页眉、检索评测、正式语料和应用的细节等做到对应步骤再补。

@@ -21,8 +21,8 @@ CREATE TABLE IF NOT EXISTS PIPELINE_CONFIG (
   parse_mode               VARCHAR       NOT NULL COMMENT 'AI_PARSE_DOCUMENT mode: LAYOUT or OCR',
   page_split               BOOLEAN       NOT NULL COMMENT 'AI_PARSE_DOCUMENT page_split',
   split_headers            OBJECT        NOT NULL COMMENT 'SPLIT_TEXT_MARKDOWN_HEADER headers_to_split_on, e.g. #: header_1, ##: header_2',
-  chunk_size_chars         NUMBER        NOT NULL COMMENT 'SPLIT_TEXT_MARKDOWN_HEADER chunk_size, in characters',
-  chunk_overlap_chars      NUMBER        NOT NULL COMMENT 'SPLIT_TEXT_MARKDOWN_HEADER overlap, in characters',
+  chunk_size_chars         NUMBER        NOT NULL COMMENT 'Maximum chunk size, in characters',
+  chunk_overlap_chars      NUMBER        NOT NULL COMMENT 'Overlap between chunks, in characters',
   max_tokens               NUMBER        NOT NULL COMMENT 'Hard cap on tokens per indexed chunk; longer chunks are split again',
   token_model              VARCHAR       NOT NULL COMMENT 'Model for SNOWFLAKE.CORTEX.COUNT_TOKENS; must match the search service embedding model',
   resplit_chunk_size_chars NUMBER        NOT NULL COMMENT 'SPLIT_TEXT_RECURSIVE_CHARACTER chunk_size for chunks over max_tokens, in characters',
@@ -35,18 +35,34 @@ CREATE TABLE IF NOT EXISTS PIPELINE_CONFIG (
 )
 COMMENT = 'medrag v2: parse and chunk parameters; a config never changes once deployed';
 
+-- 已有表增量加列。旧配置保持原方法，新配置显式选择 recursive。
+ALTER TABLE PIPELINE_CONFIG ADD COLUMN IF NOT EXISTS chunk_method VARCHAR;
+ALTER TABLE PIPELINE_CONFIG ADD COLUMN IF NOT EXISTS split_format VARCHAR;
+UPDATE PIPELINE_CONFIG
+   SET chunk_method = COALESCE(chunk_method, 'markdown_header'),
+       split_format = COALESCE(split_format, 'none')
+ WHERE chunk_method IS NULL OR split_format IS NULL;
+ALTER TABLE PIPELINE_CONFIG ALTER COLUMN chunk_method SET NOT NULL;
+ALTER TABLE PIPELINE_CONFIG ALTER COLUMN split_format SET NOT NULL;
+
 -- 仓库里定义的配置先放进会话临时表,和已部署的比对过再写入。
 CREATE OR REPLACE TEMPORARY TABLE CONFIG_FROM_REPO LIKE PIPELINE_CONFIG;
 
 INSERT INTO CONFIG_FROM_REPO (
   config_name, parse_mode, page_split, split_headers, chunk_size_chars, chunk_overlap_chars,
   max_tokens, token_model, resplit_chunk_size_chars, drop_reference_sections, add_prefix,
-  is_active, note)
--- 第一个配置:最简版,先跑通 e2e。前缀和去参考文献先关掉,跑通后新建一个配置名再开。
--- 要加配置:再写一个 SELECT,用 UNION ALL 连起来;列的顺序同上面 INSERT 的列表。
+  is_active, note, chunk_method, split_format)
+-- 旧配置参数保留，停用；已部署配置不原地改参数。
 SELECT 'base_1200', 'LAYOUT', TRUE, OBJECT_CONSTRUCT('#', 'header_1', '##', 'header_2', '###', 'header_3'),
        1200, 0, 512, 'snowflake-arctic-embed-l-v2.0', 1000, FALSE, FALSE,
-       TRUE, 'simplest config to get the pipeline running end to end; prefix and reference removal off'
+       FALSE, 'original markdown-header baseline; inactive', 'markdown_header', 'none'
+UNION ALL
+-- recursive 基线：格式 none，省略 separators 参数，使用 Snowflake 默认分隔符。
+-- chunk_size 没有默认值，overlap 默认 0；1200 / 200 是项目选择，不是 Snowflake 默认。
+-- split_headers 在 recursive 配置中不使用，保留空 OBJECT 兼容已有表结构。
+SELECT 'recursive_1200_200', 'LAYOUT', TRUE, OBJECT_CONSTRUCT(),
+       1200, 200, 512, 'snowflake-arctic-embed-l-v2.0', 1000, FALSE, FALSE,
+       TRUE, 'recursive baseline; project size 1200/overlap 200; Snowflake default separators', 'recursive', 'none'
 ;
 
 -- 先把所有检查做完,都通过了才写表;写表的两步放在一个事务里。
@@ -93,11 +109,11 @@ BEGIN
   WHEN NOT MATCHED THEN INSERT (
     config_name, parse_mode, page_split, split_headers, chunk_size_chars, chunk_overlap_chars,
     max_tokens, token_model, resplit_chunk_size_chars, drop_reference_sections, add_prefix,
-    is_active, note)
+    is_active, note, chunk_method, split_format)
   VALUES (
     r.config_name, r.parse_mode, r.page_split, r.split_headers, r.chunk_size_chars, r.chunk_overlap_chars,
     r.max_tokens, r.token_model, r.resplit_chunk_size_chars, r.drop_reference_sections, r.add_prefix,
-    r.is_active, r.note);
+    r.is_active, r.note, r.chunk_method, r.split_format);
 
   UPDATE PIPELINE_CONFIG
      SET is_active = FALSE

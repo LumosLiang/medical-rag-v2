@@ -32,8 +32,9 @@ AS
 $$
 DECLARE
   v_ok_count      INTEGER;
+  v_parse_result  VARIANT;
+  v_options       OBJECT;
   parse_failed    EXCEPTION (-20141, 'PARSE_FILE: no successful parse for this file version; see INGEST.PARSED_DOCS.error_message');
-  not_implemented EXCEPTION (-20149, 'NOT_IMPLEMENTED: 环节 3A 解析(ingest/60_parse_documents.sql PARSE_FILE)');
 BEGIN
   -- 同一版本之前已经解析成功,就不再解析:解析按页计费(docs/pitfalls.md)。
   SELECT COUNT(*) INTO :v_ok_count
@@ -48,9 +49,23 @@ BEGIN
   -- 选项用 CORE.PIPELINE_CONFIG 里 :p_config_name 那一行的 parse_mode、page_split。第三个参数 return_error_details 传 TRUE:
   -- 返回的 OBJECT 里 value 是解析结果、error 是错误原文、metadata 里有 pageCount(官方 AI_PARSE_DOCUMENT 页)。
   -- doc_id 是文件名去掉 .pdf。不要放进 CTE,会重复调用、重复计费(docs/pitfalls.md)。
-  -- 这一步花钱,真的调用之前先说一声。
-  -- 写完删掉下面这一行。
-  RAISE not_implemented;
+  SELECT OBJECT_CONSTRUCT('mode', parse_mode, 'page_split', page_split)
+    INTO :v_options
+    FROM CORE.PIPELINE_CONFIG
+   WHERE config_name = :p_config_name;
+
+  SELECT AI_PARSE_DOCUMENT(
+    TO_FILE('@MEDRAG.INGEST.CORPUS_STAGE', :p_relative_path),
+    :v_options,
+    TRUE
+  ) INTO :v_parse_result;
+
+  INSERT INTO INGEST.PARSED_DOCS(relative_path, etag, doc_id, parse_options, parse_result, page_count, error_message)
+  SELECT :p_relative_path, :p_etag, REPLACE(:p_relative_path, '.pdf', ''),
+         :v_options, :v_parse_result,
+         :v_parse_result:metadata:pageCount::NUMBER,
+         :v_parse_result:error::STRING;
+
   -- ===== 到这里 =====
 
   -- 你的代码跑完,还没有成功的行,就抛异常,让 RUN_INGEST 把这条变更标成 FAILED。
@@ -64,3 +79,9 @@ BEGIN
   RETURN 'PARSED';
 END;
 $$;
+
+-- select * from CORE.PIPELINE_CONFIG;
+
+-- ETAG 必须保留 DIRECTORY 返回值里的双引号，手动去掉会被当成另一个版本。
+-- call INGEST.PARSE_FILE('PMC10275696.pdf', '"0x8DF1DFD5260DBC0"', 'base_1200');
+-- select * from INGEST.PARSED_DOCS where relative_path = 'PMC10275696.pdf' and etag = '"0x8DF1DFD5260DBC0"';

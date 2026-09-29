@@ -10,7 +10,7 @@
 --   TO_PARSE   判断变更设;RUN_INGEST 逐条解析(60_parse_documents)、切分(70_chunk_documents),完了设 DONE 或 FAILED。
 --   TO_REMOVE  判断变更设;删旧块(50_remove_old_chunks)删掉这个版本的块,设 DONE。
 --   DONE       处理完。
---   FAILED     出错,error_message 是错误原文,retry_count 加一。要不要重试,由判断变更决定。
+--   FAILED     出错,error_message 是错误原文,retry_count 加一。当前不自动重试。
 --   其它取值(比如 SKIPPED)由判断变更自己定,别的步骤不碰。
 -- 各步各自提交,不包成一个事务(docs/decisions.md)。每一步处理所有处在它输入状态的行,不只这一批,
 -- 所以某一步失败时留下的行,下一次运行接着处理。
@@ -20,8 +20,10 @@
 USE ROLE MEDRAG_ADMIN;
 USE DATABASE MEDRAG;
 
+--只看stream，不看directory table
+
 -- 每条文件变更一行。覆盖一个已经捕获过的文件,stream 里是一删一增,这里就是两行;
--- 两次捕获之间新增后又覆盖,stream 里只剩一行新增(docs/decisions.md 先验证第 2 项)。
+-- 两次捕获之间新增后又覆盖,stream 里只剩一行新增(docs/decisions.md 已验证与待验证)。
 CREATE TABLE IF NOT EXISTS INGEST.FILE_CHANGES (
   batch_id      VARCHAR       NOT NULL COMMENT 'One per RUN_INGEST run; for tracing which run captured the row',
   relative_path VARCHAR       NOT NULL COMMENT 'Path inside CORPUS_STAGE, e.g. PMC123.pdf',
@@ -47,14 +49,16 @@ AS
 $$
 DECLARE
   v_captured      INTEGER;
-  not_implemented EXCEPTION (-20129, 'NOT_IMPLEMENTED: 环节 2A 捕获变更(ingest/30_capture_file_changes.sql CAPTURE_CHANGES)');
 BEGIN
   -- ===== 你来写:环节 2A 捕获变更 =====
   -- 一条 INSERT ... SELECT:把 INGEST.CORPUS_STREAM 的行写进 INGEST.FILE_CHANGES,batch_id 填 :p_batch_id。
   -- 用到 stream 的文件列和 METADATA$ACTION、METADATA$ISUPDATE;status 不用填,默认 PENDING。
   -- 这条 DML 一提交,stream 就前进(环节 1 在 SPIKE_STREAM 上练过同样的消费)。
-  -- 写完删掉下面这一行。
-  RAISE not_implemented;
+
+  insert into INGEST.FILE_CHANGES(batch_id, relative_path, etag, size, last_modified, change_action, is_update)
+  select :p_batch_id, relative_path, etag, size, last_modified::TIMESTAMP_LTZ, METADATA$ACTION, METADATA$ISUPDATE
+    from INGEST.CORPUS_STREAM;
+
   -- ===== 到这里 =====
 
   SELECT COUNT(*) INTO :v_captured
@@ -63,3 +67,11 @@ BEGIN
   RETURN v_captured;
 END;
 $$;
+
+
+-- Some validation
+
+-- call INGEST.CAPTURE_CHANGES('test_batch_1');
+-- use schema MEDRAG.INGEST;
+-- ls @CORPUS_STAGE;
+-- select * from directory(@CORPUS_STAGE);

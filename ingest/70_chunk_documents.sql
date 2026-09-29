@@ -83,10 +83,11 @@ BEGIN
 
   -- ===== 你来写:环节 5A 切分 =====
   -- 把这个版本的解析结果(INGEST.PARSED_DOCS 里成功的那一行)切成块,写进 IDENTIFIER(:p_target_table),列同上面的 CORE.CHUNKS。
-  -- 最简版三步,参数都取 CORE.PIPELINE_CONFIG 里 :p_config_name 那一行:
-  --   1. SPLIT_TEXT_MARKDOWN_HEADER 按 split_headers、chunk_size_chars、chunk_overlap_chars 切;
+  -- recursive 基线,参数都取 CORE.PIPELINE_CONFIG 里 :p_config_name 那一行:
+  --   1. SPLIT_TEXT_RECURSIVE_CHARACTER 按 split_format、chunk_size_chars、chunk_overlap_chars 直接切;
+  --      省略 separators 参数,使用 Snowflake 默认分隔符;不使用 split_headers。
   --   2. SNOWFLAKE.CORTEX.COUNT_TOKENS(token_model, 块) 数 token;
-  --   3. 超过 max_tokens 的块用 SPLIT_TEXT_RECURSIVE_CHARACTER 按 resplit_chunk_size_chars 再切,再数一次。
+  --   3. 超过 max_tokens 的块继续 recursive 切,再数一次;resplit_chunk_size_chars 是起始再切大小。
   -- 这个配置里前缀和去参考文献都关着:chunk_text 和 chunk_text_raw 先填一样的;section_path、页码可以先留空。
   -- chunk_id 要唯一、重跑不变;每块不超过 max_tokens。要自己定的:各页先拼起来再切,还是按页切。
   -- 写完删掉下面这一行。

@@ -7,7 +7,7 @@
 -- 顺序不能乱(见 docs/pitfalls.md):
 --   1. 建 stage 时不刷新:REFRESH_ON_CREATE 默认是 TRUE,会在 stream 建好之前就把已有文件登记进去。
 --   2. 马上建 stream:它只记录建好之后的变化,之前登记的文件不会出现在 stream 里。
---   3. 手动 REFRESH:已有文件这时才登记,作为新增出现在 stream 里(环节 1 的实验见 docs/decisions.md 先验证第 2 项)。
+--   3. 手动 REFRESH:已有文件这时才登记,作为新增出现在 stream 里(环节 1 的实验见 docs/decisions.md 已验证与待验证)。
 -- 之后的变化靠 Azure 事件自动刷新。每次部署都会 REFRESH 一次,只补上自动刷新漏掉的变化
 -- (比如重命名、删目录,见 docs/pitfalls.md)。
 
@@ -29,4 +29,10 @@ CREATE STREAM IF NOT EXISTS CORPUS_STREAM
   ON STAGE CORPUS_STAGE
   COMMENT = 'medrag v2: added, overwritten and deleted corpus PDFs; consumed only by the ingest task';
 
+
+-- Some validation
+
 ALTER STAGE CORPUS_STAGE REFRESH;
+
+-- desc stage CORPUS_STAGE;
+-- select * from CORPUS_STREAM;

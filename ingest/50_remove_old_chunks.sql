@@ -22,6 +22,8 @@ DECLARE
   remove_left     EXCEPTION (-20151, 'REMOVE_OLD_CHUNKS: some rows are still TO_REMOVE; every TO_REMOVE row must end as DONE');
 BEGIN
   -- 按 (relative_path, etag) 删块:块表只做增量 DML,不重建、不整表删(.harness/rules/pipeline-rules.md)。
+
+  -- 对应删chuck里面的，按照relative_path和etag去删除，删除的数量返回
   DELETE FROM CORE.CHUNKS c
    USING (SELECT DISTINCT relative_path, etag
             FROM INGEST.FILE_CHANGES
@@ -30,10 +32,13 @@ BEGIN
      AND c.etag = r.etag;
   v_removed := SQLROWCOUNT;
 
+  -- 删完以后设置Done。但这里有个问题，如果上面失败了怎么办？
   UPDATE INGEST.FILE_CHANGES
      SET status = 'DONE', updated_at = CURRENT_TIMESTAMP()
    WHERE status = 'TO_REMOVE';
 
+
+  -- 算一把剩下的TO_REMOVE的行数，不知道这个是不是留着做重试。
   SELECT COUNT(*) INTO :v_left
     FROM INGEST.FILE_CHANGES
    WHERE status = 'TO_REMOVE';
