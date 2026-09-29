@@ -1,36 +1,38 @@
 # 现状
 
-2026-09-28 更新。以实际代码和实测为准;写"计划"的都还没做。每个环节留给用户的空及其状态见 `docs/hands-on.md`,这里只记骨架和对象的状态。
+2026-09-29 更新。以实际代码和实测为准;写"计划"的都还没做。每个环节留给用户的空及其状态见 `docs/hands-on.md`,这里只记骨架和对象的状态。
 
 | 组件 | 状态 | 说明 |
 |---|---|---|
 | 仓库结构、文档、检查规则 | 已实现 | |
 | 提交前检查 | 已实现 | 禁止内容扫描、Terraform 格式和校验;本机提交前跑一次,推送后 GitHub Actions 再跑一次 |
-| Azure 的 Terraform 代码 | 已实现 | 两个阶段都已 apply |
+| Azure 的 Terraform 代码 | 已实现 | 两个阶段都已 apply,队列角色的改动也已 apply |
 | Azure 资源(第一阶段) | 已验证 | 2026-09-28 建成:资源组、存储账户(ADLS Gen2)、容器、队列、system topic。已核对实际设置;apply 后 plan 无差异 |
-| Azure 资源(第二阶段) | 已验证 | 2026-09-28 建成:两条角色分配、事件订阅。已在 Azure 上核对角色、范围和订阅的过滤条件;apply 后 plan 无差异。Snowflake 这边还没有 stage,端到端没有测过 |
-| Snowflake 存储集成、通知集成 | 已实现 | 2026-09-28 用 `sql/01_integrations.sql` 建成,两者 ENABLED;USAGE 已授给 MEDRAG_ADMIN |
-| 专用角色 MEDRAG_ADMIN、MEDRAG 库 | 已验证 | 2026-09-28 用 `sql/00_role.sql` 建成。已用 SHOW GRANTS 核对:挂在 SYSADMIN 下、已授给当前用户;拥有库;有 EXECUTE TASK、CORTEX_USER、两个 warehouse 和两个集成的 USAGE |
-| schema | 已验证 | 2026-09-28 用 `sql/02_schemas.sql` 建成 INGEST、CORE、EVAL、OPS,owner 都是 MEDRAG_ADMIN |
-| Git 仓库对象 | 已验证 | 2026-09-28 用 IDE 连接执行 `sql/03_git_repo.sql` 第 2、3 段建成:Git 用的 API 集成 MEDRAG_GIT_API_INT(ENABLED,USAGE 已授给 MEDRAG_ADMIN)、仓库对象 MEDRAG.OPS.REPO(owner MEDRAG_ADMIN);只读 token 的 secret 由用户建。FETCH 后 main 的提交和本地 HEAD 一致,四个 SQL 文件的 blob 哈希和 `git ls-tree` 一致;从仓库执行 `02_schemas.sql` 成功(可重复执行,没有新建对象) |
-| 部署入口 `sql/deploy.sql`、`OPS.DEPLOY_LOG` | 已验证 | 2026-09-28 从仓库对象执行成功:`OPS.DEPLOY_LOG` 已建(owner MEDRAG_ADMIN),记下的 commit_sha 和刚推送的提交一致,状态 SUCCEEDED。第一次执行在 SET 上报错(已修,见 `docs/pitfalls.md`),失败前只执行了建表。现在还没有要嵌套执行的文件 |
-| stage、stream `sql/04_stage.sql` | 已实现待验证 | 已写,没执行;要和 `31_task` 一起加进部署入口,避免 stream 空放过期 |
-| task | 计划 | `sql/31_task.sql` 只有留空(环节 6A),不进部署入口 |
-| 配置 `sql/10_config.sql` | 骨架已部署 | 2026-09-28 部署(`55fa971`):`CORE.PIPELINE_CONFIG` 已建,是空表(第一个配置是环节 4A)。"已部署的配置不可改"的比对用会话临时表测过:改参数会被发现,只改 is_active、note 放行;部署时真正报 -20101 要等有了配置才能测(4A 的验收) |
-| FILE_STATE、PARSED_DOCS、CHUNKS `sql/11_tables.sql` | 已验证 | 2026-09-28 部署(`55fa971`),owner 都是 MEDRAG_ADMIN,CHUNKS 的 change tracking 是 ON,都是空表 |
-| 切分过程 `sql/20_chunk.sql` | 骨架已部署 | `CORE.CHUNK_DOC` 已建;调用时先检查配置和解析结果(已测:配置不存在时报 -20111);切分本身是环节 5A |
-| 入库过程 `sql/30_ingest.sql` | 骨架已部署 | `INGEST.RUN_INGEST`、`PLAN_BATCH`、`PARSE_FILE` 已建。已测:`PLAN_BATCH`、`PARSE_FILE` 抛 NOT_IMPLEMENTED(PARSE_FILE 没走到 AI 调用);`RUN_INGEST` 在没有生效配置时先报 -20121。消费 stream、判断变更、解析是环节 2A、2B、3A |
+| Azure 资源(第二阶段) | 已验证 | 2026-09-28 建成两条角色分配和事件订阅。队列上原来的 Storage Queue Data Message Processor 不够,建 SPIKE_STAGE 报 403(`docs/pitfalls.md`);改成 Storage Queue Data Contributor 并 apply 后,SPIKE_STAGE 建成,上传和删除都自动进了 directory table 和 stream,apply 后 plan 无差异 |
+| Snowflake 存储集成、通知集成 | 已实现 | 2026-09-28 用 `setup/01_azure_integrations.sql`(当时在 `sql/` 下)建成,两者 ENABLED;USAGE 已授给 MEDRAG_ADMIN |
+| 专用角色 MEDRAG_ADMIN、MEDRAG 库 | 已验证 | 2026-09-28 用 `setup/00_role_and_database.sql` 建成。已用 SHOW GRANTS 核对:挂在 SYSADMIN 下、已授给当前用户;拥有库;有 EXECUTE TASK、CORTEX_USER、两个 warehouse 和两个集成的 USAGE |
+| schema | 已验证 | 2026-09-28 用 `setup/02_schemas.sql` 建成 INGEST、CORE、EVAL、OPS,owner 都是 MEDRAG_ADMIN |
+| Git 仓库对象 | 已验证 | 2026-09-28 用 IDE 连接执行 `setup/03_git_repository.sql` 第 2、3 段建成:Git 用的 API 集成 MEDRAG_GIT_API_INT(ENABLED,USAGE 已授给 MEDRAG_ADMIN)、仓库对象 MEDRAG.OPS.REPO(owner MEDRAG_ADMIN);只读 token 的 secret 由用户建。FETCH 后 main 的提交和本地 HEAD 一致,四个 SQL 文件的 blob 哈希和 `git ls-tree` 一致;从仓库执行 `02_schemas.sql` 成功(可重复执行,没有新建对象) |
+| 部署入口 `deploy.sql`、`OPS.DEPLOY_LOG` | 改动待部署 | 2026-09-28 从仓库对象执行成功:`OPS.DEPLOY_LOG` 已建(owner MEDRAG_ADMIN),记下的 commit_sha 和推送的提交一致,状态 SUCCEEDED;第一次执行在 SET 上报错(已修,见 `docs/pitfalls.md`)。2026-09-29 从 `sql/` 移到根目录,改成按数据流向嵌套执行 `ingest/` 里的文件,还没从新位置部署过 |
+| stage、stream `ingest/20_corpus_stage_and_stream.sql` | 已实现待部署 | 已加进部署入口,先于 task 部署,方便对着真实文件测解析;stream 14 天没人消费会过期。同样的建法在环节 1 的实验里用过 |
+| task | 计划 | `ingest/90_ingest_task.sql` 只有留空(环节 6A),不进部署入口 |
+| 配置 `ingest/10_pipeline_config.sql` | 已实现待部署 | 2026-09-28 部署过空表(`55fa971`)。2026-09-29 agent 写了最简配置 `base_1200`;`split_headers` 从 ARRAY 改成 SPLIT_TEXT_MARKDOWN_HEADER 要的 OBJECT,Snowflake 里的空表要 DROP 重建(待用户批准)。"已部署的配置不可改"的比对用会话临时表测过 |
+| PARSED_DOCS、CHUNKS(`ingest/60_parse_documents.sql`、`70_chunk_documents.sql`) | 已验证 | 2026-09-28 部署(`55fa971`),owner 都是 MEDRAG_ADMIN,CHUNKS 的 change tracking 是 ON,都是空表。2026-09-29 表定义移进用它们的那一步,内容没变 |
+| FILE_CHANGES(`ingest/30_capture_file_changes.sql`) | 已实现待部署 | 由 FILE_STATE 改名(`docs/decisions.md`)。Snowflake 里现在还是空表 FILE_STATE;部署前 DROP 它(用户已批准,删前再查一次行数),部署时建 FILE_CHANGES |
+| 切分过程 `ingest/70_chunk_documents.sql` | 骨架已部署 | `CORE.CHUNK_DOC` 已建(`55fa971`);调用时先检查配置和解析结果(已测:配置不存在时报 -20111);切分本身是环节 5A。2026-09-29 换了文件,只改了注释和报错里的路径,新版本待部署 |
+| 入库过程 `ingest/30`–`80` | 已实现待部署 | 2026-09-29 拆开:新建 `CAPTURE_CHANGES`、`CLASSIFY_CHANGES`、`REMOVE_OLD_CHUNKS`,`RUN_INGEST` 只剩调用顺序,`PARSE_FILE` 挪到 `60_parse_documents`;状态 READY 改名 TO_PARSE,新增 TO_REMOVE。判断变更和删旧块由 agent 写了最简版(按动作分、不重试);捕获、解析、切分留给用户。四个过程的语法用只编译的方式检查过。Snowflake 里现在还是 `55fa971` 的 `RUN_INGEST`、`PLAN_BATCH`、`PARSE_FILE`;部署前 DROP `PLAN_BATCH`(用户已批准) |
 | Cortex Search 服务 | 计划 | |
 | 数据检查 `RUN_DATA_CHECKS` | 计划 | |
 | 评测 `RUN_EVAL` | 计划 | evidence 匹配 `eval/10_match.sql` 等见 `docs/hands-on.md` 环节 9 |
 | 标注集 | 计划 | 先 30 题,再扩到 60 题以上 |
 | 检索、生成模块,FastAPI、Streamlit | 计划 | |
 | SPCS 部署 | 计划 | |
-| 语料脚本 | 计划 | |
+| 10 篇样本 `scripts/fetch_sample_pdfs.py` | 已验证 | 2026-09-28 按用户要求在本机跑:近 5 年、临床期刊白名单、允许商用的许可,10 篇来自 10 本期刊,每篇 md5 和 S3 上 JSON 给的一致。PDF 在 `data/sample/pdf/`(不进仓库),清单 `data/sample/manifest.csv`。还没传到 Azure |
+| 正式语料脚本 | 计划 | 选片规则是环节 15(`docs/hands-on.md`) |
 
 ## 先验证
 
-三项都待验证,方法和判断标准见 `docs/decisions.md`。Azure、两个集成、角色、schema 和 Git 仓库对象都已就绪,第 1、2 项可以随时做。
+三项都没有最终结论,方法和判断标准见 `docs/decisions.md`。第 2 项里 stream 的部分已在环节 1 测过(实验用的 stage、stream 和文件已删),task 触发留到环节 6B。Azure、两个集成、角色、schema 和 Git 仓库对象都已就绪,带自动刷新的 stage 也已实测能建。
 
 ## 未决
 

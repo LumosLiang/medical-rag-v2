@@ -6,7 +6,7 @@
 
 - **SQL**:留给你的地方用一对标记框出来,框里写清要做什么、输入输出、要注意的坑、怎么验收:
   ```sql
-  -- ===== 你来写:环节 2A 消费 stream =====
+  -- ===== 你来写:环节 2A 捕获变更 =====
   -- ...
   -- ===== 到这里 =====
   ```
@@ -15,7 +15,7 @@
 - **实验**:不写代码的环节(比如环节 1),框里是要你自己写的查询和要你回答的问题。
 - **讨论项**:影响骨架怎么搭的,先讨论再搭;影响不到骨架的,边做边讨论。
 - **你写完之后**:agent 跑验收、看代码、指出问题,不替你改。你要示范时,agent 写一个同类的小例子,不写你那一题。
-- 所有空都能搜到:`grep -rn "你来写" sql eval app scripts`。
+- 所有空都能搜到:`grep -rn "你来写" ingest spike eval app scripts`。
 
 状态:**等骨架**(还没搭)、**待你做**、**讨论中**、**完成**。
 
@@ -23,13 +23,13 @@
 
 | # | 环节 | agent 搭的骨架 | 你动手的部分 | 要讨论的 | 状态 |
 |---|---|---|---|---|---|
-| 1 | 自动刷新 | Terraform、集成、`sql/04_stage.sql`、实验脚本 `sql/spike/10_auto_refresh.sql` | 在 `spike/` 上传、覆盖、删除,自己写查询看 directory table 和 stream,记下看到的 | 为什么先建 stream 再 REFRESH;stream 为什么会过期 | 待你做 |
-| 2 | 消费 stream | `INGEST.FILE_STATE`;`INGEST.RUN_INGEST` 外壳 | 2A 消费 stream 的 `INSERT … SELECT`;2B `INGEST.PLAN_BATCH`:判断新增、覆盖、删除 | 事务边界放在哪 | 待你做 |
+| 1 | 自动刷新 | Terraform、集成、`ingest/20_corpus_stage_and_stream.sql`、实验脚本 `spike/10_auto_refresh.sql` | 在 `spike/` 上传、覆盖、删除,自己写查询看 directory table 和 stream,记下看到的 | 为什么先建 stream 再 REFRESH;stream 为什么会过期 | 完成 |
+| 2 | 捕获、判断、删旧块 | `INGEST.FILE_CHANGES`;三个过程;判断变更和删旧块先写了最简版 | 2A 捕获变更 `CAPTURE_CHANGES`;跑通后可以重写 2B 判断变更、2C 删旧块 | | 待你做 |
 | 3 | 解析 | `INGEST.PARSE_FILE` 外壳:跳过已解析的版本、检查结果 | 3A 调 `AI_PARSE_DOCUMENT` 写进 `INGEST.PARSED_DOCS`;跑先验证第 1、3 项(花钱,先说) | 失败文件怎么重试 | 待你做 |
-| 4 | 配置 | `CORE.PIPELINE_CONFIG`,以及"已部署的配置不可改"的检查 | 4A 定第一个配置的参数值 | 哪些参数值得放进配置 | 待你做 |
-| 5 | 切分 | `CORE.CHUNK_DOC` 外壳:读配置和解析结果、先删旧块、事务 | 5A 四步切分,chunk_id 怎么生成 | CHUNKS 还要哪些列(影响引用和过滤) | 待你做 |
-| 6 | Task | `sql/31_task.sql` 文件 | 6A task 定义;6B 端到端跑一次新增、覆盖、删除(先验证第 2 项后半) | 失败重试;用哪个 warehouse | 待你做(等 2–5) |
-| 7 | Cortex Search | `sql/40_search.sql` 和核对查询 | `CREATE CORTEX SEARCH SERVICE` 本身(花钱,先说) | 哪些列做过滤 | 等骨架 |
+| 4 | 配置 | `CORE.PIPELINE_CONFIG`,"已部署的配置不可改"的检查,最简配置 `base_1200` | 跑通后加新配置(比如打开前缀和去参考文献) | 哪些参数值得放进配置 | 跑通后 |
+| 5 | 切分 | `CORE.CHUNK_DOC` 外壳:读配置和解析结果、先删同一版本上次的块、事务 | 5A 四步切分,chunk_id 怎么生成 | CHUNKS 还要哪些列(影响引用和过滤) | 待你做 |
+| 6 | Task | `ingest/90_ingest_task.sql` 文件 | 6A task 定义;6B 端到端跑一次新增、覆盖、删除(先验证第 2 项后半) | 失败重试;用哪个 warehouse | 待你做(等 2–5) |
+| 7 | Cortex Search | `search/` 里的 SQL 和核对查询 | `CREATE CORTEX SEARCH SERVICE` 本身(花钱,先说) | 哪些列做过滤 | 等骨架 |
 | 8 | 数据检查 | `RUN_DATA_CHECKS` 框架和结果表 | 几条关键检查,比如块的 etag 必须等于当前版本 | 哪条不过就停 | 等骨架 |
 | 9 | 评测 | `RUN_EVAL` 流程外壳和结果表 | evidence 匹配 `eval/10_match`;Recall@k、MRR 的算法;第一批标注题 | 基线怎么定 | 等骨架 |
 | 10 | 检索模块 | Python 接口、Snowflake 连接、假实现、测试框架 | 调 Cortex Search 的那一段:查询、过滤、返回列、结果映射 | | 等骨架 |
@@ -43,64 +43,60 @@
 
 ## 入库链路的各个空
 
-这几个空按 1 到 6 的顺序做:前面的输出是后面的输入。环节 6 把它们连起来跑。`RUN_INGEST` 一开头就要求有生效的配置,所以端到端跑之前 4A 要先写好。
+这几个空按 1 到 6 的顺序做:前面的输出是后面的输入。环节 6 把它们连起来跑。本阶段先跑通:你写 2A、3A、5A、6A,配置、判断变更、删旧块我先写了最简版,跑通后你可以挑着重写。
 
-现在骨架都已部署(`.harness/context/current-state.md`),每个空写完就能单独调用验收。
+文件编号是数据流向(`ingest/10`–`90`),环节编号是动手的顺序,两者不一样;每个空在哪个文件,见下面各节的"在哪"。骨架的部署状态见 `.harness/context/current-state.md`;部署之后,每个空写完就能单独调用验收。
 
 ### 环节 1:自动刷新(实验)
 
-- **在哪**:`sql/spike/10_auto_refresh.sql`,只在 `spike/` 下做,不进部署入口。
+- **在哪**:`spike/10_auto_refresh.sql`,只在容器的 `spike/` 下做,不进部署入口。
 - **要做什么**:按文件里的步骤,在 Azure 上传、覆盖、删除测试 PDF;每一步之后自己写查询,看 directory table 和 stream;回答文件末尾的问题,把"覆盖在 stream 里是什么样子"写进 `docs/decisions.md` 先验证第 2 项。
 - **学什么**:事件怎么从 Azure 到 Snowflake;directory table 和 stream 各记什么;stream 什么时候前进。
 - **看**:[Refresh directory tables automatically for Azure Blob Storage](https://docs.snowflake.com/en/user-guide/data-load-dirtables-auto-azure)、[Introduction to streams](https://docs.snowflake.com/en/user-guide/streams-intro)、[CREATE STREAM](https://docs.snowflake.com/en/sql-reference/sql/create-stream)。
 - **验收**:能回答三个问题:建 stream 之前就登记的文件为什么不在 stream 里;覆盖在 stream 里是几行、各是什么;只 SELECT stream 它会不会前进。
-- **讨论**:`04_stage.sql` 为什么先建 stream 再 REFRESH;stream 为什么会过期(`docs/pitfalls.md`)。
+- **讨论**:`ingest/20_corpus_stage_and_stream.sql` 为什么先建 stream 再 REFRESH;stream 为什么会过期(`docs/pitfalls.md`)。
 
-### 环节 2A:消费 stream
+### 环节 2A:捕获变更
 
-- **在哪**:`sql/30_ingest.sql` 的 `INGEST.RUN_INGEST`。
-- **要做什么**:一条 `INSERT … SELECT`,把 `INGEST.CORPUS_STREAM` 这一批写进 `INGEST.FILE_STATE`,batch_id 用过程里的 `:v_batch_id`。
+- **在哪**:`ingest/30_capture_file_changes.sql` 的 `INGEST.CAPTURE_CHANGES(p_batch_id)`。
+- **要做什么**:一条 `INSERT … SELECT`,把 `INGEST.CORPUS_STREAM` 这一批写进 `INGEST.FILE_CHANGES`,batch_id 用 `:p_batch_id`。
 - **学什么**:stream 只有被 DML 消费才前进,只 SELECT 不算;stream 的元数据列怎么对应到表里。
-- **注意**:`CORPUS_STREAM` 要等 `04_stage` 部署后才有;在那之前可以拿环节 1 的 `SPIKE_STREAM` 练同一条语句(写进你自己建的临时表)。
-- **验收**:环节 6 端到端时,跑完 stream 为空,`FILE_STATE` 多出这一批的行,行数等于跑之前 stream 里的行数。
-- **讨论**:消费和 2B 要不要放进同一个事务。
+- **注意**:`CORPUS_STREAM` 随 `20_corpus_stage_and_stream` 一起部署;同样的消费环节 1 已经在 SPIKE_STREAM 上练过。
+- **验收**:环节 6 端到端时,跑完 stream 为空,`FILE_CHANGES` 多出这一批的行,行数等于跑之前 stream 里的行数。
+- **讨论**(已定):各步分开提交,不包成一个事务(`docs/decisions.md`)。这条语句一提交,stream 就前进了。
 
-### 环节 2B:判断新增、覆盖、删除
+### 环节 2B:判断变更(最简版已写,跑通后可以重写)
 
-- **在哪**:`sql/30_ingest.sql` 的 `INGEST.PLAN_BATCH(p_batch_id)`。它是单独的过程,可以不连 stream、用假数据测。
-- **要做什么**:读 `FILE_STATE`,决定每一行接下来怎么办,改 status;把删除和被覆盖的旧版本在 `CORE.CHUNKS` 里的块删掉。
-- **约定**(骨架依赖这几条):
-  - 输入:这一批 `status = 'PENDING'` 的行,以及你决定要重试的 `FAILED` 行。
-  - 要解析、切分的行设为 `READY`。`RUN_INGEST` 只处理 `READY` 的行,处理完设为 `DONE` 或 `FAILED`。
-  - 不用再处理的行设为 `DONE`,或者你自己定的状态(比如 `SKIPPED`),同时写 `updated_at`。
-- **要想清楚的**:覆盖是一删一增;同一路径在不同批次里的先后;以前新增失败的文件后来被删了,还要不要重试;重试几次算够(`.harness/context/current-state.md` 的未决项)。
-- **学什么**:按 (路径, etag) 管版本;块表只做增量 DML(`.harness/rules/pipeline-rules.md`)。
-- **验收**:往 `FILE_STATE` 插几组假数据(batch_id 用 `TEST_` 开头),`CALL INGEST.PLAN_BATCH('TEST_1')`,查 status 对不对。至少覆盖:新增、覆盖、删除、同一路径先失败后删除。要测删块,就往 `CHUNKS` 插路径以 `TEST_` 开头的假块,而且要在环节 7 建检索服务之前测。测完删掉测试行。
+- **在哪**:`ingest/40_classify_file_changes.sql` 的 `INGEST.CLASSIFY_CHANGES()`。
+- **现在的写法**:只按 stream 的动作分,新增设 `TO_PARSE`,删除设 `TO_REMOVE`;不重试 `FAILED`,不处理特殊情况。
+- **以后要想的**:失败怎么重试、重试几次;同一路径在不同批次里的先后。
+
+### 环节 2C:删旧块(最简版已写,跑通后可以重写)
+
+- **在哪**:`ingest/50_remove_old_chunks.sql` 的 `INGEST.REMOVE_OLD_CHUNKS()`。
+- **现在的写法**:按 (relative_path, etag) 删掉 `TO_REMOVE` 版本的块,再把这些行设为 `DONE`。`RUN_INGEST` 先删旧块再解析新版本。
 
 ### 环节 3A:解析
 
-- **在哪**:`sql/30_ingest.sql` 的 `INGEST.PARSE_FILE(p_relative_path, p_etag, p_config_name)`。解析选项(parse_mode、page_split)取这个配置。
+- **在哪**:`ingest/60_parse_documents.sql` 的 `INGEST.PARSE_FILE(p_relative_path, p_etag, p_config_name)`。解析选项(parse_mode、page_split)取这个配置。
 - **要做什么**:调 `AI_PARSE_DOCUMENT` 解析这一个文件,结果写进 `INGEST.PARSED_DOCS` 一行,成功失败都写。
-- **约定**:成功时 `error_message` 为 NULL、`page_count` 有值;失败时 `error_message` 写错误原文。骨架已经处理了两头:之前已解析成功过的版本直接跳过,不会重复计费;你的代码跑完,如果还没有成功的行就抛异常,外层把 `FILE_STATE` 标成 `FAILED`。
+- **约定**:成功时 `error_message` 为 NULL、`page_count` 有值;失败时 `error_message` 写错误原文。骨架已经处理了两头:之前已解析成功过的版本直接跳过,不会重复计费;你的代码跑完,如果还没有成功的行就抛异常,`RUN_INGEST` 把这条变更标成 `FAILED`。
 - **注意**(`docs/pitfalls.md`):不要放进 CTE,会重复调用、重复计费;用 `return_error_details` 拿错误原文和页数;`page_split` 按页返回;`doc_id` 是文件名去掉 `.pdf`。
 - **看**:[AI_PARSE_DOCUMENT](https://docs.snowflake.com/en/sql-reference/functions/ai_parse_document)、[Parsing documents with AI_PARSE_DOCUMENT](https://docs.snowflake.com/en/user-guide/snowflake-cortex/parse-document)。
 - **验收**:对一份真实 PDF 调一次,`PARSED_DOCS` 有一行、`page_count` 对;再调一次返回 `SKIPPED`。**这一步花钱,调之前先说一声。** 顺带做先验证第 1 项(能不能直接读 Azure 外部 stage)和第 3 项(单篇耗时和成本),方法见 `docs/decisions.md`。
 - **讨论**:失败文件怎么重试。
 
-### 环节 4A:第一个配置
+### 环节 4A:配置(最简版已写)
 
-- **在哪**:`sql/10_config.sql`。
-- **要做什么**:写第一个配置的参数值,`is_active` 设为 TRUE。每个参数的意思见文件里的注释;起点值在 `docs/architecture.md` 第 5 节。
+- **在哪**:`ingest/10_pipeline_config.sql`。现在只有一个 `base_1200`:LAYOUT、按页切、按 #/##/### 切成约 1200 字符、每块不超过 512 token,前缀和去参考文献关着。
 - **规则**(你定的):配置名一旦部署,参数就固定,要换参数就新建一个名字;只有 `is_active` 和 `note` 能改;入库用 `is_active` 的那个,必须正好一个。
-- **学什么**:每个参数怎么影响切分;配置为什么要不可改(评测结果要能对上当时用的参数)。
-- **验收**:部署通过,`PIPELINE_CONFIG` 里正好一个 `is_active`;故意改一个已部署配置的参数再部署,报 `-20101`,改回来再部署又通过。
-- **讨论**:还缺哪些参数、哪些不该放这里(指标参数放评测自己的表,见 `.harness/rules/eval-rules.md`)。
+- **跑通后**:新建配置打开前缀、去参考文献,用评测比较。
 
 ### 环节 5A:切分
 
-- **在哪**:`sql/20_chunk.sql` 的 `CORE.CHUNK_DOC(p_relative_path, p_etag, p_config_name, p_target_table)`。
+- **在哪**:`ingest/70_chunk_documents.sql` 的 `CORE.CHUNK_DOC(p_relative_path, p_etag, p_config_name, p_target_table)`。
 - **要做什么**:四步切分(`.harness/rules/pipeline-rules.md`),结果写进 `p_target_table`。入库时它是 `MEDRAG.CORE.CHUNKS`,以后评测实验传别的表。
-- **约定**:输入是 `PARSED_DOCS` 里这个版本解析成功的那一行,加上 `PIPELINE_CONFIG` 里 `p_config_name` 那一行。输出列见 `sql/11_tables.sql` 的 `CHUNKS`。骨架在你之前已经删掉同一版本、同一配置的旧块,并把整个过程包在事务里。
+- **约定**:输入是 `PARSED_DOCS` 里这个版本解析成功的那一行,加上 `PIPELINE_CONFIG` 里 `p_config_name` 那一行。输出列见同一个文件里 `CHUNKS` 的 CREATE TABLE。骨架在你之前已经删掉同一版本、同一配置的旧块,并把整个过程包在事务里。
 - **硬性要求**:每块不超过配置的 `max_tokens`,用 `SNOWFLAKE.CORTEX.COUNT_TOKENS(token_model, 文本)` 数(`AI_COUNT_TOKENS` 对 embedding 模型返回 NULL);`chunk_text` 是加了前缀的文本,`chunk_text_raw` 是原文;没有空块;没有参考文献章节;`chunk_id` 唯一、由确定的输入生成、重跑不变。
 - **要想清楚的**:pages 先拼起来再切,还是按页切(拼起来标题能跨页,但页码难对上);`chunk_id` 用什么拼;前缀里的文档标题从哪来。
 - **看**:[SPLIT_TEXT_MARKDOWN_HEADER](https://docs.snowflake.com/en/sql-reference/functions/split_text_markdown_header-snowflake-cortex)、[SPLIT_TEXT_RECURSIVE_CHARACTER](https://docs.snowflake.com/en/sql-reference/functions/split_text_recursive_character-snowflake-cortex)。
@@ -109,12 +105,12 @@
 
 ### 环节 6:task 和端到端
 
-- **6A 在哪**:`sql/31_task.sql`。
+- **6A 在哪**:`ingest/90_ingest_task.sql`。
 - **6A 要做什么**:用 `CREATE OR ALTER TASK` 定义 `INGEST.INGEST_TASK`:WHEN 条件、warehouse、调用 `INGEST.RUN_INGEST()`。
 - **看**:[CREATE TASK](https://docs.snowflake.com/en/sql-reference/sql/create-task),以及官方的 Triggered tasks 一页。
-- **注意**:WHEN 只能用 `SYSTEM$STREAM_HAS_DATA` 这类函数,不能查表;task 建好是暂停的,`RESUME` 之后才会跑,跑就会解析、花钱,RESUME 前先说一声;`04_stage.sql` 和 `31_task.sql` 要一起加进部署入口,避免 stream 空放过期。
+- **注意**:WHEN 只能用 `SYSTEM$STREAM_HAS_DATA` 这类函数,不能查表;task 建好是暂停的,`RESUME` 之后才会跑,跑就会解析、花钱,RESUME 前先说一声;写完把 `90_ingest_task.sql` 加进部署入口。
 - **6B**:在 `pdf/` 下依次新增、覆盖、删除一个文件,不手动刷新、不 `EXECUTE TASK`,看 task 自己跑(先验证第 2 项后半)。
-- **验收**:三次都在 30 分钟内自动触发;`FILE_STATE`、`PARSED_DOCS`、`CHUNKS` 和 Azure 上的文件对得上。
+- **验收**:三次都在 30 分钟内自动触发;`FILE_CHANGES`、`PARSED_DOCS`、`CHUNKS` 和 Azure 上的文件对得上。
 - **讨论**:失败重试;warehouse 用 MEDIUM 还是 X-SMALL(解析和切分在同一个 task 里)。
 
 ## 之后的环节

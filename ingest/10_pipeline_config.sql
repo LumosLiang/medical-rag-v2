@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS PIPELINE_CONFIG (
   config_name              VARCHAR       NOT NULL COMMENT 'Config name; parameters never change once deployed',
   parse_mode               VARCHAR       NOT NULL COMMENT 'AI_PARSE_DOCUMENT mode: LAYOUT or OCR',
   page_split               BOOLEAN       NOT NULL COMMENT 'AI_PARSE_DOCUMENT page_split',
-  split_headers            ARRAY         NOT NULL COMMENT 'Markdown header levels SPLIT_TEXT_MARKDOWN_HEADER splits on, e.g. #, ##, ###',
+  split_headers            OBJECT        NOT NULL COMMENT 'SPLIT_TEXT_MARKDOWN_HEADER headers_to_split_on, e.g. #: header_1, ##: header_2',
   chunk_size_chars         NUMBER        NOT NULL COMMENT 'SPLIT_TEXT_MARKDOWN_HEADER chunk_size, in characters',
   chunk_overlap_chars      NUMBER        NOT NULL COMMENT 'SPLIT_TEXT_MARKDOWN_HEADER overlap, in characters',
   max_tokens               NUMBER        NOT NULL COMMENT 'Hard cap on tokens per indexed chunk; longer chunks are split again',
@@ -42,21 +42,11 @@ INSERT INTO CONFIG_FROM_REPO (
   config_name, parse_mode, page_split, split_headers, chunk_size_chars, chunk_overlap_chars,
   max_tokens, token_model, resplit_chunk_size_chars, drop_reference_sections, add_prefix,
   is_active, note)
--- ===== 你来写:环节 4A 第一个配置 =====
--- 要做什么:写第一个配置的参数值,is_active 设为 TRUE。每个参数的意思见上面 CREATE TABLE 里的 COMMENT;
---           起点值见 docs/architecture.md 第 5 节(块大小约 1200 字符、每块不超过 512 token 等)。
--- 写法:每个配置一个 SELECT,列的顺序同上面 INSERT 的列表;有多个配置时用 UNION ALL 连起来。例如:
---   SELECT '<配置名>', '<parse_mode>', <TRUE|FALSE>, ARRAY_CONSTRUCT('<标题级别>', ...), <chunk_size_chars>, ...
--- 注意:token_model 要和环节 7 检索服务的 embedding 模型一致(docs/architecture.md 第 6 节);
---       配置名起一个能看出参数的名字,部署之后就不能再改它的参数。
--- 验收:docs/hands-on.md 环节 4A。
--- 写完把下面这条占位 SELECT 换成你的。它不插任何行,只让这个文件在你写之前也能部署。
-SELECT config_name, parse_mode, page_split, split_headers, chunk_size_chars, chunk_overlap_chars,
-       max_tokens, token_model, resplit_chunk_size_chars, drop_reference_sections, add_prefix,
-       is_active, note
-  FROM PIPELINE_CONFIG
- WHERE FALSE
--- ===== 到这里 =====
+-- 第一个配置:最简版,先跑通 e2e。前缀和去参考文献先关掉,跑通后新建一个配置名再开。
+-- 要加配置:再写一个 SELECT,用 UNION ALL 连起来;列的顺序同上面 INSERT 的列表。
+SELECT 'base_1200', 'LAYOUT', TRUE, OBJECT_CONSTRUCT('#', 'header_1', '##', 'header_2', '###', 'header_3'),
+       1200, 0, 512, 'snowflake-arctic-embed-l-v2.0', 1000, FALSE, FALSE,
+       TRUE, 'simplest config to get the pipeline running end to end; prefix and reference removal off'
 ;
 
 -- 先把所有检查做完,都通过了才写表;写表的两步放在一个事务里。
@@ -67,9 +57,9 @@ DECLARE
   v_repo_total INTEGER;
   v_repo_active INTEGER;
   v_table_total INTEGER;
-  config_changed EXCEPTION (-20101, '10_config: a deployed config had its parameters changed; add a new config name instead (query in the header of sql/10_config.sql)');
-  active_not_one EXCEPTION (-20102, '10_config: exactly one config must have is_active = TRUE');
-  duplicate_name EXCEPTION (-20103, '10_config: the same config name appears more than once in the file');
+  config_changed EXCEPTION (-20101, '10_pipeline_config: a deployed config had its parameters changed; add a new config name instead (query in the header of ingest/10_pipeline_config.sql)');
+  active_not_one EXCEPTION (-20102, '10_pipeline_config: exactly one config must have is_active = TRUE');
+  duplicate_name EXCEPTION (-20103, '10_pipeline_config: the same config name appears more than once in the file');
 BEGIN
   SELECT COUNT(*) - COUNT(DISTINCT config_name), COUNT(*), COUNT_IF(is_active)
     INTO :v_duplicates, :v_repo_total, :v_repo_active

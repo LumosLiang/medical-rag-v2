@@ -7,8 +7,8 @@
 改动下面任何一项都要跑 `RUN_EVAL`,提交说明里附 run_id 和结论:
 
 - 解析参数
-- 切分逻辑或参数(`sql/20_chunk.sql`、PIPELINE_CONFIG 里的切分字段)
-- 检索服务定义(`sql/40_search.sql`)或检索参数
+- 切分逻辑或参数(`ingest/70_chunk_documents.sql`、PIPELINE_CONFIG 里的切分字段)
+- 检索服务定义(`search/` 里的 SQL,计划)或检索参数
 - 检索模块
 
 ## 标注

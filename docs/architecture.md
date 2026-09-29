@@ -20,7 +20,7 @@ PDF 新增 / 覆盖 / 删除(Azure,ADLS Gen2)
   → 外部 stage 的 directory table 自动刷新
   → stream:记录文件的新增和删除
   → Task:WHEN SYSTEM$STREAM_HAS_DATA
-  → 入库存储过程:FILE_STATE → 解析(PARSED_DOCS)→ 切分 → 块表(CHUNKS)
+  → 入库存储过程:捕获变更(FILE_CHANGES)→ 判断 → 删旧块 → 解析(PARSED_DOCS)→ 切分 → 块表(CHUNKS)
   → Cortex Search:PRIMARY KEY (chunk_id),增量刷新
   → 检索模块、生成模块(AI_COMPLETE,带引用)
   → FastAPI ← Streamlit(SPCS)
@@ -35,7 +35,7 @@ Azure 资源全部由 `infra/azure/` 的 Terraform 管理,分两个阶段 apply:
 - 第一阶段:资源组、存储账户(StorageV2 + 分层命名空间,即 ADLS Gen2)、容器、事件队列、Event Grid system topic。
 - 第二阶段:Snowflake 的两个集成在 Azure 租户里完成 consent、各自的 service principal 出现之后,把两者的对象 ID 填进变量再 apply,建两条角色分配和事件订阅。事件订阅放在最后,避免队列权限就绪前往队列里堆消息。
 
-存储集成和通知集成各有一个 service principal(官方写明两者不同)。存储这边只给 Storage Blob Data Reader:Snowflake 只需要读 PDF,不写也不删。队列这边给 Storage Queue Data Message Processor,这是官方写的最小角色。
+存储集成和通知集成各有一个 service principal(官方写明两者不同)。存储这边只给 Storage Blob Data Reader:Snowflake 只需要读 PDF,不写也不删。队列这边给 Storage Queue Data Contributor,范围只有这一个队列。官方写的最小角色是 Storage Queue Data Message Processor,但实测不够:建带自动刷新的 stage 时报 403(`docs/pitfalls.md`);Contributor 是官方列出的另一个选项。
 
 事件订阅只投递 BlobCreated 和 BlobDeleted,并按 `data.api` 过滤成官方列出的操作:CopyBlob、PutBlob、PutBlockList、FlushWithClose、SftpCommit、DeleteBlob、DeleteFile、SftpRemove。ADLS 上建空文件的 CreateFile 被排除,只有内容提交(FlushWithClose)才算。事件格式保持 Event Grid schema,Snowflake 不支持 CloudEvents。
 
@@ -53,11 +53,12 @@ Snowflake 账户在 AWS 东京,文件在 Azure。官方写明,directory table �
 - 外部 stage 指向容器里的 `pdf/`,开 directory table 和自动刷新。
 - stream 建在这个 stage 上,记录 directory table 里文件的新增和删除。
 - Task 用 `WHEN SYSTEM$STREAM_HAS_DATA(...)` 触发。空闲时这个检查本身能防止 stream 过期;积压超过 14 天仍会过期,要监控 STALE_AFTER。Triggered task 12 小时没运行时,Snowflake 会安排一次健康检查(官方,时间不保证)。不设 SCHEDULE 能不能触发,是先验证的第 2 项。
-- 入库过程第一步用 INSERT … SELECT 把这一批变更写进 FILE_STATE(每个文件变更一行:路径、etag、动作、状态、错误、重试次数;覆盖是一删一增两行)。stream 只有被 DML 消费才会前进,只 SELECT 不算。然后逐个文件处理:
-  - 新文件:解析、切分、写块。
-  - 覆盖(同一路径、新 etag):删旧块,写新块。
-  - 删除:删块,文档下线。
-  - 失败:在 FILE_STATE 里留下错误原文,重试次数加一。Task 的 WHEN 不能查表,失败文件不会自动重试;重试方式在写入库过程时定。
+- 入库过程分四步,一步一个文件(`ingest/30`–`70`),由 `ingest/80_run_ingest.sql` 按顺序调用:
+  1. 捕获变更:用 INSERT … SELECT 把 stream 这一批写进 FILE_CHANGES(每条文件变更一行:路径、etag、动作、状态、错误、重试次数;覆盖一个已经捕获过的文件是一删一增两行)。stream 只有被 DML 消费才会前进,只 SELECT 不算。
+  2. 判断变更:给每条还没判断的变更定下一步:要解析的(新文件、覆盖后的新版本)、要删块的(删除、被覆盖的旧版本)、不用处理的。
+  3. 删旧块:删掉删除和被覆盖版本的块,文档或旧版本下线。先删旧块再解析新版本,块表里只留当前版本。
+  4. 解析、切分:逐个处理要解析的版本,写块。一个文件失败不影响其它文件。
+- 各步各自提交,不包成一个事务。每一步处理所有处在它输入状态的行,不只这一批,中途失败留下的行,下次运行接着处理。失败的版本在 FILE_CHANGES 里留下错误原文,重试次数加一。Task 的 WHEN 不能查表,失败文件不会自动重试;重试方式在写入库过程时定。
 - 入库过程最后调用数据检查。
 
 ## 5. 解析和切分
@@ -85,8 +86,8 @@ Snowflake 账户在 AWS 东京,文件在 Azure。官方写明,directory table �
 ## 8. 部署
 
 - Azure:`infra/azure/` 的 Terraform,在本机执行 plan,apply 前由用户批准。
-- Snowflake 的引导对象在本机执行一次(snow CLI 或 IDE 连接):专用角色 MEDRAG_ADMIN 和 MEDRAG 库(`sql/00_role.sql`)、两个集成(`sql/01_integrations.sql`)、schema(`sql/02_schemas.sql`)、Git 用的 API 集成、secret 和 Git 仓库对象。MEDRAG 库和里面的对象都归 MEDRAG_ADMIN,task 按它的权限运行;只有账户级对象(集成)由 ACCOUNTADMIN 建,再把 USAGE 授给 MEDRAG_ADMIN。
-- 之后的 SQL 都从 Snowflake 的 Git 仓库对象执行(`EXECUTE IMMEDIATE FROM`),部署时记下提交的 sha,评测结果引用它。存储账户名、租户 ID 这类值通过 `USING` 在执行时传入,不写进仓库。模板不能 include Git 仓库里的其它文件,所以入口脚本用嵌套的 `EXECUTE IMMEDIATE FROM` 逐个执行(官方限制:最多嵌套 5 层)。入口是 `sql/deploy.sql`:只从 main 部署,每次在 `OPS.DEPLOY_LOG` 记一行(分支、提交 sha、状态);中途失败的部署停在 STARTED。
+- Snowflake 的引导对象在本机执行一次(snow CLI 或 IDE 连接):专用角色 MEDRAG_ADMIN 和 MEDRAG 库(`setup/00_role_and_database.sql`)、两个集成(`setup/01_azure_integrations.sql`)、schema(`setup/02_schemas.sql`)、Git 用的 API 集成、secret 和 Git 仓库对象(`setup/03_git_repository.sql`)。MEDRAG 库和里面的对象都归 MEDRAG_ADMIN,task 按它的权限运行;只有账户级对象(集成)由 ACCOUNTADMIN 建,再把 USAGE 授给 MEDRAG_ADMIN。
+- 之后的 SQL 都从 Snowflake 的 Git 仓库对象执行(`EXECUTE IMMEDIATE FROM`),部署时记下提交的 sha,评测结果引用它。存储账户名、租户 ID 这类值通过 `USING` 在执行时传入,不写进仓库。模板不能 include Git 仓库里的其它文件,所以入口脚本用嵌套的 `EXECUTE IMMEDIATE FROM` 逐个执行(官方限制:最多嵌套 5 层)。入口是仓库根目录的 `deploy.sql`,按数据流向嵌套执行 `ingest/` 里的文件(以后的模块也从这里部署):只从 main 部署,每次在 `OPS.DEPLOY_LOG` 记一行(分支、提交 sha、状态);中途失败的部署停在 STARTED。
 - 代码放在 GitHub 私有仓库。
 
 ## 9. 检查(harness)

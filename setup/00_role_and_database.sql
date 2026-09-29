@@ -1,6 +1,6 @@
 -- 账户级引导:项目专用角色、库、账户级权限。用 ACCOUNTADMIN 执行,可以重复执行。
---   snow sql -f sql/00_role.sql
--- 必须在 01_integrations.sql 之前执行:那里把两个集成的 USAGE 授给这里建的角色。
+--   snow sql -f setup/00_role_and_database.sql
+-- 必须在 01_azure_integrations.sql 之前执行:那里把两个集成的 USAGE 授给这里建的角色。
 --
 -- MEDRAG_ADMIN 拥有 MEDRAG 库和里面的所有对象,task 按它的权限运行,不带 ACCOUNTADMIN 的全部权限。
 -- 只有账户级对象(两个集成、Git 用的 API 集成)仍由 ACCOUNTADMIN 建,再把 USAGE 授给 MEDRAG_ADMIN。

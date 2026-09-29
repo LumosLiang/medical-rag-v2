@@ -21,8 +21,11 @@ __pycache__/
 .venv/
 .pytest_cache/
 
-# 语料脚本的本地缓存
-scripts/.cache/
+# 只在本机用的东西:实验脚本、辅助工具、语料数据。scripts/ 里只有 CI 要跑的提交前检查进仓库。
+spike/
+data/
+scripts/*
+!scripts/check_forbidden.sh
 
 # macOS
 .DS_Store

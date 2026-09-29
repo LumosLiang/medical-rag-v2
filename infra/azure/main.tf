@@ -54,12 +54,13 @@ resource "azurerm_role_assignment" "snowflake_blob_reader" {
   principal_type       = "ServicePrincipal"
 }
 
-# 官方写的最小角色。
-resource "azurerm_role_assignment" "snowflake_queue_processor" {
+# 官方写的最小角色 Storage Queue Data Message Processor 实测不够,建带自动刷新的 stage 时报 403;
+# 改用官方列出的另一个角色,范围仍然只有这一个队列(docs/pitfalls.md)。
+resource "azurerm_role_assignment" "snowflake_queue_contributor" {
   count = var.snowflake_queue_sp_object_id == null ? 0 : 1
 
   scope                = azurerm_storage_queue.events.id
-  role_definition_name = "Storage Queue Data Message Processor"
+  role_definition_name = "Storage Queue Data Contributor"
   principal_id         = var.snowflake_queue_sp_object_id
   principal_type       = "ServicePrincipal"
 }
@@ -96,5 +97,5 @@ resource "azurerm_eventgrid_system_topic_event_subscription" "to_snowflake" {
     }
   }
 
-  depends_on = [azurerm_role_assignment.snowflake_queue_processor]
+  depends_on = [azurerm_role_assignment.snowflake_queue_contributor]
 }

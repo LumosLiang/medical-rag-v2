@@ -1,12 +1,12 @@
 --!jinja
--- 部署入口:按编号顺序执行 sql/ 里的文件,并把这次部署的提交 sha 记进 OPS.DEPLOY_LOG。
--- 引导文件 00–03 不在这里:它们要 ACCOUNTADMIN 或用户介入,只在新环境里执行一次(见 README 的部署顺序)。
+-- 部署入口:按顺序执行各模块的文件(现在只有 ingest/),并把这次部署的提交 sha 记进 OPS.DEPLOY_LOG。
+-- setup/ 里的引导文件不在这里:它们要 ACCOUNTADMIN 或用户介入,只在新环境里执行一次(见 README 的部署顺序)。
 --
 -- 只从 main 部署。用 MEDRAG_ADMIN 执行,先推送,再拉取、执行:
 --   USE ROLE MEDRAG_ADMIN;
 --   ALTER GIT REPOSITORY MEDRAG.OPS.REPO FETCH;
---   EXECUTE IMMEDIATE FROM @MEDRAG.OPS.REPO/branches/main/sql/deploy.sql;
--- 加进 04_stage 之后,最后一行要带上 USING (stage_base_url => '<terraform output 的 stage_base_url>')。
+--   EXECUTE IMMEDIATE FROM @MEDRAG.OPS.REPO/branches/main/deploy.sql
+--     USING (stage_base_url => '<terraform output 的 stage_base_url>');
 -- 值只在执行时传入,不写进仓库。末尾加 DRY_RUN = TRUE 只看渲染结果,不执行。
 --
 -- 某个文件中途失败就停,前面执行过的不回滚(见 docs/pitfalls.md),所以每个文件都要能重复执行。
@@ -39,14 +39,18 @@ INSERT INTO OPS.DEPLOY_LOG (deploy_id, branch, commit_sha, status, started_at, d
   SELECT $deploy_id, "name", "commit_hash", 'STARTED', CURRENT_TIMESTAMP(), CURRENT_USER(), CURRENT_ROLE()
   FROM TABLE(RESULT_SCAN(LAST_QUERY_ID()));
 
--- 按编号执行,写法:EXECUTE IMMEDIATE FROM './<文件>';
--- 04_stage.sql 要和 31_task.sql 一起加进来:stream 建好后,没人消费、也没人调用 SYSTEM$STREAM_HAS_DATA,
--- 14 天后就可能过期(见 docs/pitfalls.md)。它要的 USING 参数见 04_stage.sql 的文件头。
+-- 按数据流向执行,写法:EXECUTE IMMEDIATE FROM './<模块>/<文件>';(相对路径从本文件所在的目录算)
+-- 过程里引用的表只在执行到那一句时才解析,所以前面的过程可以引用后面才建的表。
+-- 20_corpus_stage_and_stream.sql 要 stage_base_url:部署时在最后一行传入,这里原样往下传。90_ingest_task.sql 写完再加在它后面。
 -- 有空没写(docs/hands-on.md)也能部署:没写的地方只在被调用时抛 NOT_IMPLEMENTED。
-EXECUTE IMMEDIATE FROM './10_config.sql';
-EXECUTE IMMEDIATE FROM './11_tables.sql';
-EXECUTE IMMEDIATE FROM './20_chunk.sql';
-EXECUTE IMMEDIATE FROM './30_ingest.sql';
+EXECUTE IMMEDIATE FROM './ingest/10_pipeline_config.sql';
+EXECUTE IMMEDIATE FROM './ingest/20_corpus_stage_and_stream.sql' USING (stage_base_url => '{{ stage_base_url }}');
+EXECUTE IMMEDIATE FROM './ingest/30_capture_file_changes.sql';
+EXECUTE IMMEDIATE FROM './ingest/40_classify_file_changes.sql';
+EXECUTE IMMEDIATE FROM './ingest/50_remove_old_chunks.sql';
+EXECUTE IMMEDIATE FROM './ingest/60_parse_documents.sql';
+EXECUTE IMMEDIATE FROM './ingest/70_chunk_documents.sql';
+EXECUTE IMMEDIATE FROM './ingest/80_run_ingest.sql';
 
 -- 上面的文件会切换 schema,这里切回来。
 USE DATABASE MEDRAG;
