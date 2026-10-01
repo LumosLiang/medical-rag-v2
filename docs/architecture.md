@@ -26,7 +26,7 @@ PDF 保留在 Azure，不额外复制进 Snowflake 内部 stage。解析结果�
 
 ## 解析和切分
 
-`PARSE_FILE` 从 PIPELINE_CONFIG 取 LAYOUT、page_split 参数，调用一次 AI_PARSE_DOCUMENT，完整结果先落 PARSED_DOCS。成功时 error_message 为 NULL；同一版本成功后再次调用跳过。切分只读解析表，不重复解析。
+`PARSE_FILE` 从 PIPELINE_CONFIG 取 LAYOUT、page_split 参数，调用一次 AI_PARSE_DOCUMENT，完整结果先落 PARSED_DOCS。成功时 error_message 为 NULL；同一版本成功后再次调用跳过。切分只读解析表，不重复解析；当前按页切并保留 0 起始页码。
 
 下一次部署的默认配置为 `recursive_1200_200`：直接 recursive 切分，格式 `none`，1200 字符、200 字符 overlap，省略 separators 参数以使用 Snowflake 默认分隔符；chunk_size 必填、overlap 默认 0，所以 1200 / 200 是项目选择。每块仍最多 512 token，模型 `snowflake-arctic-embed-l-v2.0`，超限块继续 recursive 切。旧配置 `base_1200` 保留并停用。前缀和去参考文献暂时关闭。配置名对应固定参数，换参数新建名字；入库只用唯一 active 配置。
 
@@ -36,7 +36,7 @@ CHUNKS 只做增量 DML，开启 CHANGE_TRACKING；chunk_id 是确定且唯一�
 
 切分后建 Cortex Search，源为 CHUNKS，主键 chunk_id、模型与 token_model 一致，再用 AI_COMPLETE 生成带检索引用的回答。之后再做评测、FastAPI、Streamlit 和 SPCS；自动数据检查也是后续功能。
 
-Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git 仓库对象部署，deploy.sql 记录 sha，当前执行 ingest/10–80。实验语句不执行；task 填完再加到 80 后面。项目对象归 MEDRAG_ADMIN，v1 MEDICAL_RAG 不改。
+Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git 仓库对象部署，deploy.sql 记录 sha，当前执行 ingest/10–90。实验语句不执行；task 创建后暂停，切分验收通过再 RESUME。项目对象归 MEDRAG_ADMIN，v1 MEDICAL_RAG 不改。
 
 ## 官方参考
 

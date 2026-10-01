@@ -41,7 +41,7 @@ INSERT INTO OPS.DEPLOY_LOG (deploy_id, branch, commit_sha, status, started_at, d
 
 -- 按数据流向执行,写法:EXECUTE IMMEDIATE FROM './<模块>/<文件>';(相对路径从本文件所在的目录算)
 -- 过程里引用的表只在执行到那一句时才解析,所以前面的过程可以引用后面才建的表。
--- 20_corpus_stage_and_stream.sql 要 stage_base_url:部署时在最后一行传入,这里原样往下传。90_ingest_task.sql 写完再加在它后面。
+-- 20_corpus_stage_and_stream.sql 要 stage_base_url:部署时在最后一行传入,这里原样往下传。
 -- 有空没写(docs/hands-on.md)也能部署:没写的地方只在被调用时抛 NOT_IMPLEMENTED。
 EXECUTE IMMEDIATE FROM './ingest/10_pipeline_config.sql';
 EXECUTE IMMEDIATE FROM './ingest/20_corpus_stage_and_stream.sql' USING (stage_base_url => '{{ stage_base_url }}');
@@ -51,6 +51,7 @@ EXECUTE IMMEDIATE FROM './ingest/50_remove_old_chunks.sql';
 EXECUTE IMMEDIATE FROM './ingest/60_parse_documents.sql';
 EXECUTE IMMEDIATE FROM './ingest/70_chunk_documents.sql';
 EXECUTE IMMEDIATE FROM './ingest/80_run_ingest.sql';
+EXECUTE IMMEDIATE FROM './ingest/90_ingest_task.sql';
 
 -- 上面的文件会切换 schema,这里切回来。
 USE DATABASE MEDRAG;

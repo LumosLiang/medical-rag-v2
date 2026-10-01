@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-Azure 事件链路和 Snowflake 基础对象已建好；10 个 PDF 已捕获，1 份已成功解析出 12 页；真实 etag 的解析和重复跳过验收通过，结果见 `.harness/context/current-state.md`。切分和 task 尚未填写，Cortex Search 和回答生成尚未实现。
+Azure 事件链路和 Snowflake 基础对象已建好；10 个 PDF 已捕获，1 份已成功解析出 12 页；真实 etag 的解析和重复跳过验收通过，结果见 `.harness/context/current-state.md`。切分和 task 已在本地写好，待部署验收；Cortex Search 和回答生成尚未实现。
 
 ## 入口
 
@@ -13,10 +13,11 @@ Azure 事件链路和 Snowflake 基础对象已建好；10 个 PDF 已捕获，1
 - `docs/hands-on.md`：用户动手的位置和验收方式。
 - `AGENTS.md`：协作规则。
 - `docs/pitfalls.md`：实际遇到的坑；`docs/decisions.md`：设计取舍。
+- `tests/chunk_one_file.sql`：单文件切分验收，运行后查看每块完整文本。
 
 ## 部署
 
-`infra/azure/` 管理 Azure 资源；`setup/` 是一次性引导。日常只部署根目录 `deploy.sql`，按顺序执行 `ingest/10`–`80`，记录提交 sha。实验 SQL 保留为注释，不随部署执行；task 写完再加入部署。
+`infra/azure/` 管理 Azure 资源；`setup/` 是一次性引导。日常只部署根目录 `deploy.sql`，按顺序执行 `ingest/10`–`90`，记录提交 sha。实验 SQL 保留为注释，不随部署执行；task 创建后保持暂停，单文件切分验收完成后再 RESUME。
 
 用户提交并推送后，在 Snowflake 执行：
 

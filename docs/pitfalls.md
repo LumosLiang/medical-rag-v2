@@ -23,6 +23,6 @@
 - 一个队列只给一个通知集成，排错只 peek；ADLS stage 仍使用 blob 端点。NOTIFICATION_INTEGRATION 名字写大写。[官方](https://docs.snowflake.com/en/user-guide/data-load-dirtables-auto-azure)。
 - stream 只 SELECT 不前进；保留期看 STALE_AFTER。当前 task 未实现，不能假定 stream 会被自动维护。[官方](https://docs.snowflake.com/en/user-guide/streams-intro)。
 - EXECUTE IMMEDIATE FROM 中途失败，前面已执行的语句不回滚；DEPLOY_LOG 会停在 STARTED。实验 CALL 不能随部署运行。[官方](https://docs.snowflake.com/en/sql-reference/sql/execute-immediate-from)。
-- 切分开启事务后出错会回滚，未写的 CHUNK_DOC 会抛 NOT_IMPLEMENTED；暂不调用 RUN_INGEST 验收整条链路。
+- 切分开启事务后出错会回滚，CHUNK_DOC 本地已实现但尚未部署验收；task 未完成前不调用 RUN_INGEST 验收整条链路。
 
 参考文献、页眉、检索评测、正式语料和应用的细节等做到对应步骤再补。

@@ -1,5 +1,5 @@
 -- 入库 task:stream 有数据时调用 INGEST.RUN_INGEST()(80_run_ingest.sql)。
--- 写完之后加进 deploy.sql(在 80_run_ingest.sql 后面)。建好的 task 是暂停的,RESUME 之后才会跑。
+-- 已在 deploy.sql 的 80_run_ingest.sql 后面调用。建好的 task 是暂停的,RESUME 之后才会跑。
 
 USE ROLE MEDRAG_ADMIN;
 USE SCHEMA MEDRAG.INGEST;
@@ -9,5 +9,11 @@ USE SCHEMA MEDRAG.INGEST;
 -- 要定的:不设 SCHEDULE,只靠 stream 有数据时触发,WHEN 写什么(WHEN 只能用 SYSTEM$STREAM_HAS_DATA 这类函数,不能查表);
 -- 用哪个 warehouse(MEDICAL_RAG_INDEX_WH 是 X-SMALL,MEDICAL_RAG_PARSE_WH 是 MEDIUM)。
 -- 看:官方 CREATE TASK、Triggered tasks 两页。
--- 这个文件在你写之前不进部署入口,所以这里没有占位语句。
--- ===== 到这里 =====
+-- 已填好定义并加入部署入口。
+
+create or alter task INGEST.INGEST_TASK
+  warehouse = MEDICAL_RAG_PARSE_WH
+  when
+    SYSTEM$STREAM_HAS_DATA('INGEST.CORPUS_STREAM')
+  as
+    call INGEST.RUN_INGEST();
