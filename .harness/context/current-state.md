@@ -1,30 +1,21 @@
 # 当前状态
 
-2026-10-01 更新。本阶段先跑通核心链路；代码实现和运行验证分开记录。
+2026-10-02 更新。代码部署与运行验收分开记录。
 
 | 部分 | 状态 |
 |---|---|
-| Azure 存储、队列、Event Grid、角色分配 | 已建立；既有实测上传、覆盖、删除可自动刷新；本次只读核对存储和事件订阅设置符合配置 |
-| Snowflake 角色、集成、库、schema、Git 仓库对象 | 已建立并验证 |
-| deploy、配置、CORPUS_STAGE / STREAM、入库表与过程骨架 | 已从 Git 仓库部署，既有记录 sha 为 7d3cdd2；不代表后续本地修改已部署 |
-| 捕获变更 CAPTURE_CHANGES | 已填写；本次核实 10 个 PDF 都已进入 FILE_CHANGES，状态 PENDING，含 LAST_MODIFIED 显式类型转换 |
-| 判断变更、删旧块、RUN_INGEST | 最简版已实现；判断和空表删块有既有验证记录，整条链路尚未跑通 |
-| 解析 PARSE_FILE | 已运行验收通过：用 directory table 原始 etag 首次返回 PARSED、再次 SKIPPED；当前版本成功记录 1 行、页数 12，与原 PDF 一致；远程解析过程与本地一致 |
-| 切分 CHUNK_DOC | 本地已实现按页 recursive 切分、写块及超限回滚；`tests/chunk_one_file.sql` 可展示单文件每块全文；均尚未部署和运行验收，远程 CHUNKS 上次核对为 0 行 |
-| task | 本地已填写并加入 deploy，监听 CORPUS_STREAM；尚未部署和运行验收，既有 SHOW TASKS 记录为未建 |
-| Cortex Search、回答生成 | 尚未实现；本次确认库内没有搜索服务 |
+| Azure ADLS Gen2 → Event Grid → Queue → directory table | 已建立；此前实测新增、覆盖、删除可自动刷新 |
+| Snowflake 入库 SQL | Git 提交 `c7f3080` 已部署，`OPS.DEPLOY_LOG` 为 `SUCCEEDED` |
+| CAPTURE_CHANGES、CLASSIFY_CHANGES、REMOVE_OLD_CHUNKS、RUN_INGEST | 10 条既有 PENDING 已手工触发处理：9 条 DONE、1 条 FAILED；自动触发尚未验收 |
+| PARSE_FILE | 已验收：真实 etag 的 PDF 解析出 12 页，重复调用返回 SKIPPED；失败文件也已成功解析 12 页 |
+| CHUNK_DOC | 已部署的旧版：9 份文档现有 718 块；`PMC9883575.pdf` 因超限状态 FAILED。新版使用会话临时过程和表在真实 PDF 上验证：基线 64 块、最大 652 token，补切版 70 块、最大 505 token；两者均无 NULL token 或重复 ID。新版尚未正式部署 |
+| INGEST_TASK | 已部署，监听 CORPUS_STREAM；`SHOW TASKS` 显示 `suspended`，尚未验证自动触发 |
+| Cortex Search | 基线服务 `MEDICAL_CHUNKS_RECURSIVE_ONCE_1200_200` 的 SQL 已在本地准备，源查询仅取对应配置；尚未部署或检索验收 |
+| 回答生成 | 尚未实现 |
 | 自动数据检查、评测、应用与 SPCS | 后续再做 |
 
-本次已注释用户在 ingest/20、30、60 中添加的实验查询和 CALL，保留原部署步骤；文档和 harness 已精简。本地禁止内容扫描、diff 格式检查、受版本控制的 Terraform 格式检查和 validate 通过。没有 commit / push，没有变更 Azure 资源或 Snowflake 对象定义；验收新增一条真实 etag 的解析记录。
-
-本次已成功连接 Snowflake 只读核对上述状态。CORPUS_STREAM 未过期，STALE_AFTER 为 2026-10-13（账户返回时间）；但 task 尚未建立。
-
-2026-09-29 已完成真实 etag 的解析与重复调用验收：PARSED → SKIPPED，无错误，当前版本仅一条成功记录；只读核对 stream 为 0 行。旧手工测试记录保留，不删除，实际调用必须取 directory table 原值。
-
-远程捕获过程与本地仅差一个已移除的未使用异常声明，核心 SQL 相同。本地文档和注释整理尚未提交部署；DEPLOY_LOG 最近成功记录仍为 7d3cdd2。
-
-本地配置已新增 `recursive_1200_200` 为下次部署的 active 基线：recursive、none 格式、1200 字符 / 200 字符 overlap、默认分隔符；旧 base_1200 保留停用。仅更新配置和说明，尚未部署，远程 active 仍是 base_1200，切分核心已在本地实现，仍待部署和验收。
+本地部署 SQL 会把 `recursive_once_1200_200` 设为 active：只切一次，token_count 用于观察。补切策略用新名 `recursive_resplit_to_512_tokens_1200_200`；旧名 `recursive_1200_200` 和历史块保留。切分代码拆在 `ingest/chunk/`：入口统一负责事务，算法分别实现。2026-10-02 通过临时对象验证递归 CTE、动态分派和两种算法；验证对象随会话结束消失，正式 CHUNKS 未改。没有更改 Azure 资源。
 
 ## 下一步
 
-下一步由用户提交并推送，再部署新配置、切分过程与 task；运行 `tests/chunk_one_file.sql`，查看一篇 PDF 的每块全文、页码与 token 数，并核对空块、重复 ID、512 token 上限。确认 task 已创建且暂停，切分验收后再 RESUME，验证上传、覆盖、删除自动处理。
+用户提交推送后从 Snowflake Git 仓库部署，再手工运行 `tests/backfill_baseline.sql` 把已完成文件按基线重切，验收正式服务的索引与检索结果。切换 active 配置不会自动重切现有文档；之前 FAILED 的文件仍需单独重试，task 自动触发仍待验收。

@@ -1,8 +1,8 @@
--- 切分:把一个解析好的文件版本切成块,写进块表。块表 CORE.CHUNKS 是检索服务的源表。
--- 入库和评测实验共用这一份切分逻辑:入库时写 CORE.CHUNKS,评测实验传自己的表。
+-- 切分入口：读配置、分派算法、统一负责删旧块和事务验收。CHUNKS 是检索服务源表。
+-- 算法在同目录的独立文件；chunk_method 对应 CORE.CHUNK_<METHOD>，新增算法不改入口。
 -- 由 deploy.sql 调用,可以重复执行:表已经存在就不动;过程用 CREATE OR REPLACE 更新(改签名要先 DROP,见 docs/pitfalls.md)。
 --
--- 在流程里的位置:RUN_INGEST(80_run_ingest.sql)解析完一个版本(60_parse_documents.sql)就调 CHUNK_DOC。
+-- 在流程里的位置:RUN_INGEST(../80_run_ingest.sql)解析完一个版本(../60_parse_documents.sql)就调 CHUNK_DOC。
 -- 用法:CALL MEDRAG.CORE.CHUNK_DOC('<relative_path>', '<etag>', '<config_name>', 'MEDRAG.CORE.CHUNKS');
 -- 返回写入的块数。任何一步出错都抛异常,这个版本的块回到调用前的样子。
 --
@@ -11,10 +11,6 @@
 
 USE ROLE MEDRAG_ADMIN;
 USE DATABASE MEDRAG;
-
--- test
-
-
 
 -- 检索服务的源表。只做增量 DML(INSERT、DELETE、MERGE),不重建、不整表删了重插。
 CREATE TABLE IF NOT EXISTS CORE.CHUNKS (
@@ -63,10 +59,11 @@ DECLARE
   v_max_tokens   INTEGER;
   v_token_model  VARCHAR;
   v_method       VARCHAR;
+  v_call_sql     VARCHAR;
   missing_config EXCEPTION (-20111, 'CHUNK_DOC: config not found in CORE.PIPELINE_CONFIG');
   missing_parse  EXCEPTION (-20112, 'CHUNK_DOC: this file version has no successful row in INGEST.PARSED_DOCS');
-  wrong_method   EXCEPTION (-20113, 'CHUNK_DOC: config must use recursive chunking');
-  invalid_chunks EXCEPTION (-20114, 'CHUNK_DOC: no chunks, or a chunk still exceeds max_tokens');
+  wrong_method   EXCEPTION (-20113, 'CHUNK_DOC: invalid chunk_method identifier');
+  invalid_chunks EXCEPTION (-20114, 'CHUNK_DOC: no chunks or token_count is NULL');
 BEGIN
   -- 先取这次切分的配置；后面的 SQL 都用同一组参数。
   SELECT COUNT(*) INTO :v_config_count
@@ -83,9 +80,10 @@ BEGIN
          :v_resplit_size, :v_max_tokens, :v_token_model, :v_method
     FROM CORE.PIPELINE_CONFIG
    WHERE config_name = :p_config_name;
-  IF (v_method <> 'recursive') THEN
+  IF (v_method IS NULL OR NOT REGEXP_LIKE(v_method, '^[a-z][a-z0-9_]*$')) THEN
     RAISE wrong_method;
   END IF;
+  v_call_sql := 'CALL CORE.CHUNK_' || UPPER(v_method) || '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
   -- 只处理已经解析成功的这个文件版本，不重新调用 AI_PARSE_DOCUMENT。
   SELECT COUNT(*) INTO :v_parsed_count
@@ -104,60 +102,13 @@ BEGIN
      AND etag = :p_etag
      AND config_name = :p_config_name;
 
-  -- 数据流：解析后的页 → 初次切块 → 超 token 的块再切 → 排序编号 → 写表。
-  INSERT INTO IDENTIFIER(:p_target_table) (
-    chunk_id, doc_id, relative_path, etag, config_name, chunk_index,
-    section_path, chunk_text, chunk_text_raw, token_count, page_start, page_end
-  )
-  -- first_pass：FLATTEN 把 pages 展开成行，再把每页切成多行；piece.index 是页内顺序。
-  -- recursive 函数省略 separators，使用 Snowflake 默认分隔符。
-  WITH first_pass AS (
-    SELECT p.doc_id,
-           page.value:index::NUMBER AS page_index,
-           piece.index AS piece_index,
-           piece.value::VARCHAR AS chunk_text,
-           SNOWFLAKE.CORTEX.COUNT_TOKENS(:v_token_model, piece.value::VARCHAR) AS token_count
-      FROM INGEST.PARSED_DOCS p,
-           LATERAL FLATTEN(input => p.parse_result:value:pages) page,
-           LATERAL FLATTEN(input => SNOWFLAKE.CORTEX.SPLIT_TEXT_RECURSIVE_CHARACTER(
-             page.value:content::VARCHAR, :v_format, :v_chunk_size, :v_overlap
-           )) piece
-     WHERE p.relative_path = :p_relative_path
-       AND p.etag = :p_etag
-       AND p.error_message IS NULL
-  ),
-  -- final_pass：未超限的块原样保留；超限的块用较小尺寸再切一次。
-  -- IFF 的两边都返回 ARRAY，FLATTEN 再把最终块展开成行。
-  final_pass AS (
-    SELECT f.doc_id, f.page_index, f.piece_index, smaller.index AS smaller_index,
-           smaller.value::VARCHAR AS chunk_text
-      FROM first_pass f,
-           LATERAL FLATTEN(input => IFF(
-             f.token_count > :v_max_tokens,
-             SNOWFLAKE.CORTEX.SPLIT_TEXT_RECURSIVE_CHARACTER(
-               f.chunk_text, :v_format, :v_resplit_size, :v_overlap
-             ),
-             ARRAY_CONSTRUCT(f.chunk_text)
-           )) smaller
-  ),
-  -- 排序chunk：去掉空白块，按页码和两次切分的顺序生成从 0 开始的 chunk_index。 减1是因为 ROW_NUMBER() 从 1 开始。
-  numbered AS (
-    SELECT doc_id, page_index, chunk_text,
-           ROW_NUMBER() OVER (ORDER BY page_index, piece_index, smaller_index) - 1 AS chunk_index
-      FROM final_pass
-     WHERE NULLIF(TRIM(chunk_text), '') IS NOT NULL
-  )
-  -- 同一文件版本、配置和顺序生成相同 chunk_id；当前无前缀，原文和索引文本相同。
-    -- sha2是为了生成唯一的chunk_id，确保即使在不同环境或时间运行相同的输入也会得到相同的输出
-  SELECT SHA2(:p_relative_path || '|' || :p_etag || '|' || :p_config_name || '|' || chunk_index::VARCHAR, 256),
-         doc_id, :p_relative_path, :p_etag, :p_config_name, chunk_index,
-         NULL, chunk_text, chunk_text,
-         SNOWFLAKE.CORTEX.COUNT_TOKENS(:v_token_model, chunk_text),
-         page_index, page_index
-    FROM numbered;
+  EXECUTE IMMEDIATE :v_call_sql USING (
+    p_relative_path, p_etag, p_config_name, p_target_table,
+    v_format, v_chunk_size, v_overlap, v_token_model,
+    v_resplit_size, v_max_tokens
+  );
 
-  -- 字符数不保证 token 数；超限或没有块时回滚。
-  SELECT COUNT(*), COUNT_IF(token_count IS NULL OR token_count > :v_max_tokens)
+  SELECT COUNT(*), COUNT_IF(token_count IS NULL)
     INTO :v_chunk_count, :v_bad_count
     FROM IDENTIFIER(:p_target_table)
    WHERE relative_path = :p_relative_path
@@ -176,4 +127,4 @@ EXCEPTION
 END;
 $$;
 
--- call CORE.CHUNK_DOC('PMC10275696.pdf', '"0x8DF1DFD5260DBC0"', 'recursive_1200_200', 'MEDRAG.CORE.CHUNKS');
+-- call CORE.CHUNK_DOC('PMC10275696.pdf', '"0x8DF1DFD5260DBC0"', 'recursive_once_1200_200', 'MEDRAG.CORE.CHUNKS');

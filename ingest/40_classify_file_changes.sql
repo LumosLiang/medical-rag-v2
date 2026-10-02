@@ -2,7 +2,7 @@
 -- 由 deploy.sql 调用,可以重复执行(过程用 CREATE OR REPLACE 更新;改签名要先 DROP,见 docs/pitfalls.md)。
 --
 -- 在流程里的位置:RUN_INGEST(80_run_ingest.sql)在捕获变更(30_capture_file_changes.sql)之后调它。它设的 TO_REMOVE 由删旧块(50_remove_old_chunks.sql)处理,
--- TO_PARSE 由 RUN_INGEST 交给解析(60_parse_documents.sql)和切分(70_chunk_documents.sql)。状态约定见 30_capture_file_changes.sql 的文件头。
+-- TO_PARSE 由 RUN_INGEST 交给解析(60_parse_documents.sql)和切分(chunk/chunk_doc.sql)。状态约定见 30_capture_file_changes.sql 的文件头。
 -- 用法:CALL MEDRAG.INGEST.CLASSIFY_CHANGES();不连 stream,可以往 FILE_CHANGES 插假数据来测。
 
 USE ROLE MEDRAG_ADMIN;

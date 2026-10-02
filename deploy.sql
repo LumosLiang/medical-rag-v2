@@ -1,5 +1,5 @@
 --!jinja
--- 部署入口:按顺序执行各模块的文件(现在只有 ingest/),并把这次部署的提交 sha 记进 OPS.DEPLOY_LOG。
+-- 部署入口:按顺序执行入库文件,并把这次部署的提交 sha 记进 OPS.DEPLOY_LOG。
 -- setup/ 里的引导文件不在这里:它们要 ACCOUNTADMIN 或用户介入,只在新环境里执行一次(见 README 的部署顺序)。
 --
 -- 只从 main 部署。用 MEDRAG_ADMIN 执行,先推送,再拉取、执行:
@@ -49,9 +49,12 @@ EXECUTE IMMEDIATE FROM './ingest/30_capture_file_changes.sql';
 EXECUTE IMMEDIATE FROM './ingest/40_classify_file_changes.sql';
 EXECUTE IMMEDIATE FROM './ingest/50_remove_old_chunks.sql';
 EXECUTE IMMEDIATE FROM './ingest/60_parse_documents.sql';
-EXECUTE IMMEDIATE FROM './ingest/70_chunk_documents.sql';
+EXECUTE IMMEDIATE FROM './ingest/chunk/chunk_doc.sql';
+EXECUTE IMMEDIATE FROM './ingest/chunk/recursive_baseline.sql';
+EXECUTE IMMEDIATE FROM './ingest/chunk/recursive_token_limited.sql';
 EXECUTE IMMEDIATE FROM './ingest/80_run_ingest.sql';
 EXECUTE IMMEDIATE FROM './ingest/90_ingest_task.sql';
+EXECUTE IMMEDIATE FROM './search/10_cortex_search.sql';
 
 -- 上面的文件会切换 schema,这里切回来。
 USE DATABASE MEDRAG;

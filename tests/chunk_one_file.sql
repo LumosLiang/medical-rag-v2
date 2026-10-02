@@ -1,4 +1,4 @@
--- 单文件切分验收。先部署 ingest/10 和 ingest/70，再在 Snowflake 里单独运行本文件。
+-- 单文件切分验收。先部署 ingest/10 和 ingest/chunk/ 下的文件，再在 Snowflake 里单独运行本文件。
 -- 文件名可换成 DIRECTORY(@MEDRAG.INGEST.CORPUS_STAGE) 中已有且 PARSED_DOCS 已解析成功的 PDF。
 USE ROLE MEDRAG_ADMIN;
 USE WAREHOUSE MEDICAL_RAG_PARSE_WH;
@@ -42,37 +42,37 @@ SELECT page.value:index::NUMBER AS page_number,
    AND page.index = 0
  ORDER BY piece.index;
 
--- 以下是原来的切分验收，需要先部署 CHUNK_DOC；上面的练习不需要。
+-- 以下验收改用之前超限失败的文件，检查基线能否正常写入；上面的 FLATTEN 练习不变。
 EXECUTE IMMEDIATE $$
 DECLARE
-  v_path  VARCHAR DEFAULT 'PMC10275696.pdf';
+  v_path  VARCHAR DEFAULT 'PMC9883575.pdf';
   v_etag  VARCHAR;
   v_count NUMBER;
 BEGIN
   SELECT etag INTO :v_etag
     FROM DIRECTORY(@MEDRAG.INGEST.CORPUS_STAGE)
    WHERE relative_path = :v_path;
-  CALL CORE.CHUNK_DOC(:v_path, :v_etag, 'recursive_1200_200', 'MEDRAG.CORE.CHUNKS') INTO :v_count;
+  CALL CORE.CHUNK_DOC(:v_path, :v_etag, 'recursive_once_1200_200', 'MEDRAG.CORE.CHUNKS') INTO :v_count;
   RETURN 'chunked ' || v_path || ': ' || v_count::VARCHAR || ' chunks';
 END;
 $$;
 
--- 验收：超 512 token、空块、重复 ID 都应为 0。
+-- 基线允许超 512 token；over_limit 只用于观察。空块、重复 ID 应为 0。
 SELECT COUNT(*) AS chunk_count,
        COALESCE(COUNT_IF(token_count > 512 OR token_count IS NULL), 0) AS over_limit,
        COALESCE(COUNT_IF(NULLIF(TRIM(chunk_text), '') IS NULL), 0) AS empty_chunks,
        COUNT(*) - COUNT(DISTINCT chunk_id) AS duplicate_ids
   FROM CORE.CHUNKS
- WHERE relative_path = 'PMC10275696.pdf'
+ WHERE relative_path = 'PMC9883575.pdf'
    AND etag = (SELECT etag FROM DIRECTORY(@MEDRAG.INGEST.CORPUS_STAGE)
-                WHERE relative_path = 'PMC10275696.pdf')
-   AND config_name = 'recursive_1200_200';
+                WHERE relative_path = 'PMC9883575.pdf')
+   AND config_name = 'recursive_once_1200_200';
 
 -- 看每一块的完整文本、页码和 token 数。这个 SELECT 的结果就是你要看的切分效果。
 SELECT chunk_index, page_start, token_count, LENGTH(chunk_text) AS char_count, chunk_text
   FROM CORE.CHUNKS
- WHERE relative_path = 'PMC10275696.pdf'
+ WHERE relative_path = 'PMC9883575.pdf'
    AND etag = (SELECT etag FROM DIRECTORY(@MEDRAG.INGEST.CORPUS_STAGE)
-                WHERE relative_path = 'PMC10275696.pdf')
-   AND config_name = 'recursive_1200_200'
+                WHERE relative_path = 'PMC9883575.pdf')
+   AND config_name = 'recursive_once_1200_200'
  ORDER BY chunk_index;

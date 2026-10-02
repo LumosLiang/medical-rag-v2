@@ -7,7 +7,7 @@
 --
 -- FILE_CHANGES.status 的约定,每个状态只由一步处理:
 --   PENDING    本步写入;判断变更(40_classify_file_changes)处理。
---   TO_PARSE   判断变更设;RUN_INGEST 逐条解析(60_parse_documents)、切分(70_chunk_documents),完了设 DONE 或 FAILED。
+--   TO_PARSE   判断变更设;RUN_INGEST 逐条解析(60_parse_documents)、切分(chunk/chunk_doc),完了设 DONE 或 FAILED。
 --   TO_REMOVE  判断变更设;删旧块(50_remove_old_chunks)删掉这个版本的块,设 DONE。
 --   DONE       处理完。
 --   FAILED     出错,error_message 是错误原文,retry_count 加一。当前不自动重试。

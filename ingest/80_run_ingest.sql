@@ -4,7 +4,7 @@
 --   1. 捕获变更   CAPTURE_CHANGES(30_capture_file_changes.sql)    stream 里这一批 → FILE_CHANGES,PENDING
 --   2. 判断变更   CLASSIFY_CHANGES(40_classify_file_changes.sql)  PENDING → TO_PARSE、TO_REMOVE 或其它
 --   3. 删旧块     REMOVE_OLD_CHUNKS(50_remove_old_chunks.sql)   TO_REMOVE 的版本从 CHUNKS 删掉 → DONE
---   4. 解析、切分 PARSE_FILE(60_parse_documents.sql)、CHUNK_DOC(70_chunk_documents.sql),逐条处理 TO_PARSE → DONE 或 FAILED
+--   4. 解析、切分 PARSE_FILE(60_parse_documents.sql)、CHUNK_DOC(chunk/chunk_doc.sql),逐条处理 TO_PARSE → DONE 或 FAILED
 --
 -- 各步各自提交,不包成一个事务(docs/decisions.md)。每一步处理所有处在它输入状态的行,不只这一批:
 -- 某一步失败,留下的行等下一次运行接着处理(stream 再有数据时,或者手动 CALL RUN_INGEST())。

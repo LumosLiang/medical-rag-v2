@@ -28,15 +28,16 @@ PDF 保留在 Azure，不额外复制进 Snowflake 内部 stage。解析结果�
 
 `PARSE_FILE` 从 PIPELINE_CONFIG 取 LAYOUT、page_split 参数，调用一次 AI_PARSE_DOCUMENT，完整结果先落 PARSED_DOCS。成功时 error_message 为 NULL；同一版本成功后再次调用跳过。切分只读解析表，不重复解析；当前按页切并保留 0 起始页码。
 
-下一次部署的默认配置为 `recursive_1200_200`：直接 recursive 切分，格式 `none`，1200 字符、200 字符 overlap，省略 separators 参数以使用 Snowflake 默认分隔符；chunk_size 必填、overlap 默认 0，所以 1200 / 200 是项目选择。每块仍最多 512 token，模型 `snowflake-arctic-embed-l-v2.0`，超限块继续 recursive 切。旧配置 `base_1200` 保留并停用。前缀和去参考文献暂时关闭。配置名对应固定参数，换参数新建名字；入库只用唯一 active 配置。
+当前默认配置为 `recursive_once_1200_200`：每页调用一次 recursive 切分，格式 `none`，1200 字符、200 字符 overlap，省略 separators 参数以使用 Snowflake 默认分隔符。记录 `token_count`，但超出 512 token 不再补切或让入库失败。`recursive_resplit_to_512_tokens_1200_200` 是改进策略：超限块反复缩小尺寸补切，直到不超过 512 token；若无法达标才报错。已部署的旧名 `recursive_1200_200` 及其历史块保留，不改名。前缀和去参考文献暂时关闭。换策略或参数新建配置名，入库只用唯一 active 配置。
 
-CHUNKS 只做增量 DML，开启 CHANGE_TRACKING；chunk_id 是确定且唯一的字符串。切分过程删除同版本同配置的旧块、写新块放在一个事务里。
+CORE.CHUNKS 存放各策略的块，以 config_name 区分；chunk_id 包含配置名，确定且唯一。表只做增量 DML，开启 CHANGE_TRACKING；切分过程删除同版本同配置的旧块、写新块放在一个事务里。
+`CHUNK_DOC` 通过 `chunk_method` 调用对应的 `CORE.CHUNK_<METHOD>` 过程；每个算法接受同一组参数，只负责生成和插入块。配置检查、删旧块、事务及通用验收留在 `CHUNK_DOC`。新算法增加独立过程和配置，不扩写切分入口。
 
 ## 后续和部署
 
-切分后建 Cortex Search，源为 CHUNKS，主键 chunk_id、模型与 token_model 一致，再用 AI_COMPLETE 生成带检索引用的回答。之后再做评测、FastAPI、Streamlit 和 SPCS；自动数据检查也是后续功能。
+每个切分配置对应独立 Cortex Search 服务，服务名采用 `MEDICAL_CHUNKS_<CONFIG_NAME>`。当前只部署 `MEDICAL_CHUNKS_RECURSIVE_ONCE_1200_200`，源查询固定筛选 `recursive_once_1200_200`，主键为 chunk_id，模型与 token_model 一致。其他策略的块可共存于同一表，需要检索时再建对应服务，并确保该配置覆盖同一批文件版本。切换 active 配置不会自动重切历史文件，也不会改变已有服务的源查询。基线块超过模型的 512-token 窗口时，语义向量只使用截断部分，关键词检索仍使用全文。再用 AI_COMPLETE 生成带检索引用的回答；评测、FastAPI、Streamlit 和 SPCS 稍后实现。
 
-Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git 仓库对象部署，deploy.sql 记录 sha，当前执行 ingest/10–90。实验语句不执行；task 创建后暂停，切分验收通过再 RESUME。项目对象归 MEDRAG_ADMIN，v1 MEDICAL_RAG 不改。
+Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git 仓库对象部署，deploy.sql 记录 sha，当前执行 ingest 各模块。实验语句不执行；task 创建后暂停，切分验收通过再 RESUME。项目对象归 MEDRAG_ADMIN，v1 MEDICAL_RAG 不改。
 
 ## 官方参考
 
@@ -45,3 +46,5 @@ Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git �
 - [AI_PARSE_DOCUMENT](https://docs.snowflake.com/en/sql-reference/functions/ai_parse_document)
 - [Recursive 切分](https://docs.snowflake.com/en/sql-reference/functions/split_text_recursive_character-snowflake-cortex)
 - [COUNT_TOKENS](https://docs.snowflake.com/en/sql-reference/functions/count_tokens-snowflake-cortex)
+- [递归 CTE](https://docs.snowflake.com/en/sql-reference/constructs/with)
+- [Cortex Search](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-overview)

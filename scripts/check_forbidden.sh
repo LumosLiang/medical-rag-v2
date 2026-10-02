@@ -46,7 +46,11 @@ status=0
 
 # 已跟踪的文件,加上还没跟踪、也没被忽略的文件,也就是下一次提交会带上的内容。
 matches="$(git ls-files -z -co --exclude-standard -- . ':(exclude)scripts/check_forbidden.sh' \
-  | xargs -0 grep -nIiE -f "$patterns_file" -- || true)"
+  | while IFS= read -r -d '' file; do
+      if [[ -f "$file" ]]; then
+        grep -nIiE -f "$patterns_file" -- "$file" || true
+      fi
+    done)"
 if [[ -n "$matches" ]]; then
   printf '%s\n' "$matches"
   echo "上面这些行含有不该进仓库的内容。" >&2

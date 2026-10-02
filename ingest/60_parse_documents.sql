@@ -1,7 +1,7 @@
 -- 解析:用 AI_PARSE_DOCUMENT 解析一个文件版本,结果存进 INGEST.PARSED_DOCS。
 -- 由 deploy.sql 调用,可以重复执行:表已经存在就不动;过程用 CREATE OR REPLACE 更新(改签名要先 DROP,见 docs/pitfalls.md)。
 --
--- 在流程里的位置:RUN_INGEST(80_run_ingest.sql)对每条 TO_PARSE 的变更,先调 PARSE_FILE,再调 CHUNK_DOC(70_chunk_documents.sql)。
+-- 在流程里的位置:RUN_INGEST(80_run_ingest.sql)对每条 TO_PARSE 的变更,先调 PARSE_FILE,再调 CHUNK_DOC(chunk/chunk_doc.sql)。
 -- 用法:CALL MEDRAG.INGEST.PARSE_FILE('<relative_path>', '<etag>', '<config_name>');
 --
 -- 以后加列:在 CREATE TABLE 后面写 ALTER TABLE ... ADD COLUMN IF NOT EXISTS;只改 CREATE TABLE 本身不会影响已经部署的表。

@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-Azure 事件链路和 Snowflake 基础对象已建好；10 个 PDF 已捕获，1 份已成功解析出 12 页；真实 etag 的解析和重复跳过验收通过，结果见 `.harness/context/current-state.md`。切分和 task 已在本地写好，待部署验收；Cortex Search 和回答生成尚未实现。
+Azure 事件链路和旧版入库 SQL 已部署。10 份 PDF 已处理 9 份；1 份因块超过 512 token 失败。单次切分基线、递归补切改进版和 Cortex Search 定义已在本地准备，待部署验收。Task 已创建且暂停。实际状态见 `.harness/context/current-state.md`。
 
 ## 入口
 
@@ -14,10 +14,12 @@ Azure 事件链路和 Snowflake 基础对象已建好；10 个 PDF 已捕获，1
 - `AGENTS.md`：协作规则。
 - `docs/pitfalls.md`：实际遇到的坑；`docs/decisions.md`：设计取舍。
 - `tests/chunk_one_file.sql`：单文件切分验收，运行后查看每块完整文本。
+- `tests/backfill_baseline.sql`：部署后手工把已完成文件补成基线块。
+- `tests/cortex_search_one_query.sql`：服务建好后的检索预览。
 
 ## 部署
 
-`infra/azure/` 管理 Azure 资源；`setup/` 是一次性引导。日常只部署根目录 `deploy.sql`，按顺序执行 `ingest/10`–`90`，记录提交 sha。实验 SQL 保留为注释，不随部署执行；task 创建后保持暂停，单文件切分验收完成后再 RESUME。
+`infra/azure/` 管理 Azure 资源；`setup/` 是一次性引导。日常只部署根目录 `deploy.sql`，按顺序执行 `ingest/`、`ingest/chunk/` 和 `search/` 的文件，记录提交 sha。实验 SQL 不随部署执行；Task 当前暂停，新版切分须先验收并重切基线语料，服务才会有正式检索内容。
 
 用户提交并推送后，在 Snowflake 执行：
 
