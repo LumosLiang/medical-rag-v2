@@ -13,9 +13,9 @@
 | `search/` | Cortex Search 服务定义；每个服务只读取对应切分配置，当前只建基线服务 |
 | `ingest/80` | INGEST.RUN_INGEST |
 | `tests/chunk_one_file.sql`、`tests/backfill_baseline.sql`、`tests/cortex_search_one_query.sql` | 手工切分、补齐和检索验收，不进部署入口 |
-| `ingest/90` | INGEST.INGEST_TASK，已部署并暂停，待新版切分验收后测试自动触发 |
+| `ingest/90` | INGEST.INGEST_TASK，已部署并暂停，自动触发待验收 |
 | `spike/`、`data/`、`.harness/local/` | 本地实验、样本、连接检查结果，全部忽略 |
 
 库 MEDRAG，角色 MEDRAG_ADMIN，schema 为 INGEST、CORE、EVAL、OPS。Git 仓库对象为 MEDRAG.OPS.REPO。账户级集成为 MEDRAG_AZURE_STORAGE_INT、MEDRAG_AZURE_QUEUE_INT、MEDRAG_GIT_API_INT。
 
-warehouse 沿用 MEDICAL_RAG_PARSE_WH（解析）、MEDICAL_RAG_INDEX_WH（部署与服务刷新）。Cortex Search 定义已在本地，尚未部署；评测和应用尚未实现。
+warehouse 沿用 MEDICAL_RAG_PARSE_WH（解析）、MEDICAL_RAG_INDEX_WH（部署与服务刷新）。基线 Cortex Search 已部署并验收；评测和应用尚未实现。

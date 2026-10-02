@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-Azure 事件链路和旧版入库 SQL 已部署。10 份 PDF 已处理 9 份；1 份因块超过 512 token 失败。单次切分基线、递归补切改进版和 Cortex Search 定义已在本地准备，待部署验收。Task 已创建且暂停。实际状态见 `.harness/context/current-state.md`。
+Azure 事件链路、入库 SQL、两种切分策略和基线 Cortex Search 已部署。9 份 PDF 已补齐 700 个基线块并完成检索验收；1 份此前失败的 PDF 尚待重试。Task 仍暂停。实际状态见 `.harness/context/current-state.md`。
 
 ## 入口
 
@@ -19,7 +19,7 @@ Azure 事件链路和旧版入库 SQL 已部署。10 份 PDF 已处理 9 份；1
 
 ## 部署
 
-`infra/azure/` 管理 Azure 资源；`setup/` 是一次性引导。日常只部署根目录 `deploy.sql`，按顺序执行 `ingest/`、`ingest/chunk/` 和 `search/` 的文件，记录提交 sha。实验 SQL 不随部署执行；Task 当前暂停，新版切分须先验收并重切基线语料，服务才会有正式检索内容。
+`infra/azure/` 管理 Azure 资源；`setup/` 是一次性引导。日常只部署根目录 `deploy.sql`，按顺序执行 `ingest/`、`ingest/chunk/` 和 `search/` 的文件，记录提交 sha。实验 SQL 不随部署执行；Task 当前暂停。
 
 用户提交并推送后，在 Snowflake 执行：
 

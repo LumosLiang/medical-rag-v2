@@ -23,7 +23,7 @@
 - 一个队列只给一个通知集成，排错只 peek；ADLS stage 仍使用 blob 端点。NOTIFICATION_INTEGRATION 名字写大写。[官方](https://docs.snowflake.com/en/user-guide/data-load-dirtables-auto-azure)。
 - stream 只 SELECT 不前进；保留期看 STALE_AFTER。当前 task 已建立但暂停，不能假定 stream 会被自动维护。[官方](https://docs.snowflake.com/en/user-guide/streams-intro)。
 - EXECUTE IMMEDIATE FROM 中途失败，前面已执行的语句不回滚；DEPLOY_LOG 会停在 STARTED。实验 CALL 不能随部署运行。[官方](https://docs.snowflake.com/en/sql-reference/sql/execute-immediate-from)。
-- 切分开启事务后出错会回滚。实测 PMC9883575.pdf 在二次切分后仍有 2 块超过 512 token；本地已改为单次切分基线和递归补切改进版，尚未部署验收。Task 尚待自动触发验收。
+- 切分开启事务后出错会回滚。旧版实测 PMC9883575.pdf 在二次切分后仍有 2 块超过 512 token；单次切分基线和递归补切改进版现已部署验收。Task 尚待自动触发验收。
 - Cortex Search 的 arctic-embed-l-v2.0 只有 512-token 窗口；超长基线块会截断语义向量输入，但关键词索引仍用全文。[官方](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-overview)。
 
 参考文献、页眉、检索评测、正式语料和应用的细节等做到对应步骤再补。
