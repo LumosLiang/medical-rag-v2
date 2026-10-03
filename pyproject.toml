@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "medical-rag-v2"
+version = "0.1.0"
+description = "Event-driven medical literature RAG on Azure and Snowflake"
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+api = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
+  "pydantic>=2.10,<3",
+  "snowflake>=1.0,<2",
+  "snowflake-connector-python>=3.14,<5",
+]
+ui = ["streamlit>=1.45,<2", "httpx>=0.28,<1"]
+dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["medical_rag*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]
+pythonpath = ["src"]

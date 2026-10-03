@@ -1,0 +1,29 @@
+spec:
+  containers:
+    - name: backend
+      image: /medrag/ops/app_images/backend:v1
+      env:
+        SNOWFLAKE_DATABASE: MEDRAG
+        SNOWFLAKE_SCHEMA: CORE
+        SNOWFLAKE_WAREHOUSE: MEDICAL_RAG_INDEX_WH
+        RAG_CONFIG_NAME: recursive_once_1200_200
+        RAG_MODEL: llama3.3-70b
+      readinessProbe:
+        port: 8000
+        path: /healthz
+    - name: frontend
+      image: /medrag/ops/app_images/frontend:v1
+      mountSessionToken: false
+      env:
+        BACKEND_URL: http://localhost:8000
+      readinessProbe:
+        port: 8501
+        path: /_stcore/health
+  endpoints:
+    - name: ui
+      port: 8501
+      public: true
+serviceRoles:
+  - name: ui-access
+    endpoints:
+      - ui

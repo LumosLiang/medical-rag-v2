@@ -3,7 +3,7 @@
 -- 可以重复执行:已经存在的集成不会被改动。必须在 00_role_and_database.sql 之后执行。
 --
 -- 用 ACCOUNTADMIN 执行。三个值取自 infra/azure 的 terraform output,执行时传入,不写进仓库:
---   snow sql -f setup/01_azure_integrations.sql --enable-templating JINJA \
+--   snow sql -f infra/snowflake/setup/01_azure_integrations.sql --enable-templating JINJA \
 --     -D tenant_id="$(terraform -chdir=infra/azure output -raw tenant_id)" \
 --     -D stage_base_url="$(terraform -chdir=infra/azure output -raw stage_base_url)" \
 --     -D queue_url="$(terraform -chdir=infra/azure output -raw queue_url)"

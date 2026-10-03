@@ -16,7 +16,7 @@
 --          COMMENT = 'medrag v2: read-only GitHub token for the Git repository object';
 --
 -- 第 2、3 段:本文件。仓库地址执行时传入,不写进仓库:
---   snow sql -f setup/03_git_repository.sql --enable-templating JINJA -D repo_url="$(git remote get-url origin)"
+--   snow sql -f infra/snowflake/setup/03_git_repository.sql --enable-templating JINJA -D repo_url="$(git remote get-url origin)"
 --
 -- token 到期后:在 GitHub 上重新生成,再 ALTER SECRET MEDRAG.OPS.GITHUB_READONLY SET PASSWORD = '<新 token>'。
 -- 报错排查见 docs/pitfalls.md 的"Git 仓库对象"一节。

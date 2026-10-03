@@ -1,6 +1,6 @@
 --!jinja
 -- 部署入口:按顺序执行入库文件,并把这次部署的提交 sha 记进 OPS.DEPLOY_LOG。
--- setup/ 里的引导文件不在这里:它们要 ACCOUNTADMIN 或用户介入,只在新环境里执行一次(见 README 的部署顺序)。
+-- infra/snowflake/setup/ 里的引导文件不在这里:它们要 ACCOUNTADMIN 或用户介入,只在新环境里执行一次(见 README 的部署顺序)。
 --
 -- 只从 main 部署。用 MEDRAG_ADMIN 执行,先推送,再拉取、执行:
 --   USE ROLE MEDRAG_ADMIN;
@@ -42,19 +42,19 @@ INSERT INTO OPS.DEPLOY_LOG (deploy_id, branch, commit_sha, status, started_at, d
 -- 按数据流向执行,写法:EXECUTE IMMEDIATE FROM './<模块>/<文件>';(相对路径从本文件所在的目录算)
 -- 过程里引用的表只在执行到那一句时才解析,所以前面的过程可以引用后面才建的表。
 -- 20_corpus_stage_and_stream.sql 要 stage_base_url:部署时在最后一行传入,这里原样往下传。
--- 有空没写(docs/hands-on.md)也能部署:没写的地方只在被调用时抛 NOT_IMPLEMENTED。
-EXECUTE IMMEDIATE FROM './ingest/10_pipeline_config.sql';
-EXECUTE IMMEDIATE FROM './ingest/20_corpus_stage_and_stream.sql' USING (stage_base_url => '{{ stage_base_url }}');
-EXECUTE IMMEDIATE FROM './ingest/30_capture_file_changes.sql';
-EXECUTE IMMEDIATE FROM './ingest/40_classify_file_changes.sql';
-EXECUTE IMMEDIATE FROM './ingest/50_remove_old_chunks.sql';
-EXECUTE IMMEDIATE FROM './ingest/60_parse_documents.sql';
-EXECUTE IMMEDIATE FROM './ingest/chunk/chunk_doc.sql';
-EXECUTE IMMEDIATE FROM './ingest/chunk/recursive_baseline.sql';
-EXECUTE IMMEDIATE FROM './ingest/chunk/recursive_token_limited.sql';
-EXECUTE IMMEDIATE FROM './ingest/80_run_ingest.sql';
-EXECUTE IMMEDIATE FROM './ingest/90_ingest_task.sql';
-EXECUTE IMMEDIATE FROM './search/10_cortex_search.sql';
+-- 有空没写(.harness/context/implementation.md)也能部署:没写的地方只在被调用时抛 NOT_IMPLEMENTED。
+EXECUTE IMMEDIATE FROM './src/sql/ingest/10_pipeline_config.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/20_corpus_stage_and_stream.sql' USING (stage_base_url => '{{ stage_base_url }}');
+EXECUTE IMMEDIATE FROM './src/sql/ingest/30_capture_file_changes.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/40_classify_file_changes.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/50_remove_old_chunks.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/60_parse_documents.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/chunk_doc.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/recursive_baseline.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/recursive_token_limited.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/80_run_ingest.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/90_ingest_task.sql';
+EXECUTE IMMEDIATE FROM './src/sql/search/10_cortex_search.sql';
 
 -- 上面的文件会切换 schema,这里切回来。
 USE DATABASE MEDRAG;

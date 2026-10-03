@@ -1,4 +1,4 @@
--- 单文件切分验收。先部署 ingest/10 和 ingest/chunk/ 下的文件，再在 Snowflake 里单独运行本文件。
+-- 单文件切分验收。先部署 src/sql/ingest/10 和 src/sql/ingest/chunk/ 下的文件，再在 Snowflake 里单独运行本文件。
 -- 文件名可换成 DIRECTORY(@MEDRAG.INGEST.CORPUS_STAGE) 中已有且 PARSED_DOCS 已解析成功的 PDF。
 USE ROLE MEDRAG_ADMIN;
 USE WAREHOUSE MEDICAL_RAG_PARSE_WH;

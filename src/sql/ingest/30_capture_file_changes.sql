@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS INGEST.FILE_CHANGES (
   last_modified TIMESTAMP_LTZ,
   change_action VARCHAR       NOT NULL COMMENT 'METADATA$ACTION from the stream: INSERT or DELETE',
   is_update     BOOLEAN       COMMENT 'METADATA$ISUPDATE from the stream',
-  status        VARCHAR       NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING, TO_PARSE, TO_REMOVE, DONE, FAILED, or a value set by CLASSIFY_CHANGES; see ingest/30_capture_file_changes.sql',
+  status        VARCHAR       NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING, TO_PARSE, TO_REMOVE, DONE, FAILED, or a value set by CLASSIFY_CHANGES; see src/sql/ingest/30_capture_file_changes.sql',
   error_message VARCHAR       COMMENT 'Error text when FAILED',
   retry_count   NUMBER        NOT NULL DEFAULT 0,
   captured_at   TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP() COMMENT 'When the row was copied from the stream',

@@ -2,7 +2,7 @@
 -- 语料的外部 stage(容器里的 pdf/)、directory table 自动刷新,以及 stage 上的 stream。可以重复执行。
 -- 由 deploy.sql 调用。stream 建好后 14 天没人消费会过期(docs/pitfalls.md),task(90_ingest_task.sql)要在那之前建好。
 -- stage_base_url 取自 infra/azure 的 terraform output,以 / 结尾,执行时传入,不写进仓库:
---   EXECUTE IMMEDIATE FROM './ingest/20_corpus_stage_and_stream.sql' USING (stage_base_url => '<stage_base_url>');
+--   EXECUTE IMMEDIATE FROM './src/sql/ingest/20_corpus_stage_and_stream.sql' USING (stage_base_url => '<stage_base_url>');
 --
 -- 顺序不能乱(见 docs/pitfalls.md):
 --   1. 建 stage 时不刷新:REFRESH_ON_CREATE 默认是 TRUE,会在 stream 建好之前就把已有文件登记进去。

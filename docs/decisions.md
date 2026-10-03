@@ -6,10 +6,9 @@
 - 解析输出先保存，改切分不重新解析。当前基线 `recursive_once_1200_200` 每页只切一次，带 overlap、默认分隔符；超 512 token 仅记录。`recursive_resplit_to_512_tokens_1200_200` 是反复补切的改进版；已部署的旧配置 `recursive_1200_200` 保留历史数据。前缀和参考文献过滤关闭。
 - 已部署配置名对应固定参数；换参数新建配置名。后续评测标注 evidence 原文，避免绑定 chunk_id。
 - 各切分策略共用 CORE.CHUNKS，以 config_name 区分；每个策略有独立 Cortex Search 服务，服务名后缀与配置名一致。当前只部署基线服务。评测时按配置筛选相同文件版本，不另建块表。
-- 当前先跑通核心链路，用户写捕获、解析、切分、task；其余衔接用最简版。
 
 ## 已验证与待验证
 
 2026-09-28 实验确认：Azure 上传、覆盖、删除能自动刷新 directory table 和 stream；只 SELECT 不消费 stream。stream 记录两次消费之间的净变化：已消费文件覆盖是一删一增；同一区间新增再覆盖只剩最新新增；新增再删除没有行。
 
-task 自动触发仍待验证；解析的当前验收见 `.harness/context/current-state.md`。不开 directory table 是否也能解析、批量解析耗时不影响当前链路，暂不扩展实验。
+上传已通过 task 自动触发验收，覆盖和删除的 task 路径尚待验证。最新运行记录见 `.harness/context/current-state.md`。

@@ -13,7 +13,9 @@ Azure ADLS Gen2 的 PDF 新增 / 覆盖 / 删除
   → CORE.CHUNKS → Cortex Search → AI_COMPLETE 带引用的回答
 ```
 
-PDF 保留在 Azure，不额外复制进 Snowflake 内部 stage。解析结果和文本块落在 Snowflake 表里。入库、切分和检索用 SQL；后续 FastAPI、Streamlit 用 Python，部署到 SPCS。
+PDF 保留在 Azure，不额外复制进 Snowflake 内部 stage。解析结果和文本块落在 Snowflake 表里。入库用 SQL；应用采用 FastAPI、Streamlit，两个 Docker 容器，部署目标为 SPCS。
+
+前端通过 HTTP 调用 `/search` 或 `/ask`，不直接连接 Snowflake。后端使用 Cortex Search Python API 检索，AI_COMPLETE 生成回答；检索原文与页码一起返回前端。当前核心 API、前端 HTTP 和 session_state 尚待实现。SPCS 中只公开前端，由 Snowflake 认证；后端用挂载的 OAuth token 以服务所有者 MEDRAG_ADMIN 执行查询。各用户访问同一语料，尚无按用户分文档的权限设计。
 
 ## 入库约定
 
@@ -33,11 +35,13 @@ PDF 保留在 Azure，不额外复制进 Snowflake 内部 stage。解析结果�
 CORE.CHUNKS 存放各策略的块，以 config_name 区分；chunk_id 包含配置名，确定且唯一。表只做增量 DML，开启 CHANGE_TRACKING；切分过程删除同版本同配置的旧块、写新块放在一个事务里。
 `CHUNK_DOC` 通过 `chunk_method` 调用对应的 `CORE.CHUNK_<METHOD>` 过程；每个算法接受同一组参数，只负责生成和插入块。配置检查、删旧块、事务及通用验收留在 `CHUNK_DOC`。新算法增加独立过程和配置，不扩写切分入口。
 
-## 后续和部署
+## 检索与部署
 
-每个切分配置对应独立 Cortex Search 服务，服务名采用 `MEDICAL_CHUNKS_<CONFIG_NAME>`。当前只部署 `MEDICAL_CHUNKS_RECURSIVE_ONCE_1200_200`，源查询固定筛选 `recursive_once_1200_200`，主键为 chunk_id，模型与 token_model 一致。其他策略的块可共存于同一表，需要检索时再建对应服务，并确保该配置覆盖同一批文件版本。切换 active 配置不会自动重切历史文件，也不会改变已有服务的源查询。基线块超过模型的 512-token 窗口时，语义向量只使用截断部分，关键词检索仍使用全文。再用 AI_COMPLETE 生成带检索引用的回答；评测、FastAPI、Streamlit 和 SPCS 稍后实现。
+每个切分配置对应独立 Cortex Search 服务，服务名采用 `MEDICAL_CHUNKS_<CONFIG_NAME>`。当前只部署 `MEDICAL_CHUNKS_RECURSIVE_ONCE_1200_200`，源查询固定筛选 `recursive_once_1200_200`，主键为 chunk_id，模型与 token_model 一致。其他策略的块可共存于同一表，需要检索时再建对应服务，并确保该配置覆盖同一批文件版本。切换 active 配置不会自动重切历史文件，也不会改变已有服务的源查询。基线块超过模型的 512-token 窗口时，语义向量只使用截断部分，关键词检索仍使用全文。应用通过 RAG_CONFIG_NAME 选择相应服务，不更改入库 active 配置。评测稍后实现。
 
-Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git 仓库对象部署，deploy.sql 记录 sha，当前执行 ingest 各模块。实验语句不执行；task 创建后暂停，切分验收通过再 RESUME。项目对象归 MEDRAG_ADMIN，v1 MEDICAL_RAG 不改。
+应用与入库分开部署：本机使用 `compose.yaml`，SPCS 文件在 `deploy/spcs/`，不加入根目录 deploy.sql。前端只保存当前问题的结果；暂不将历史对话送入模型。运行说明见 `docs/deployment.md`。
+
+Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git 仓库对象部署，deploy.sql 记录 sha，执行入库和搜索各模块。实验语句不执行；task 创建时默认暂停，运行时需显式 RESUME；现有部署的运行状态见验收记录。项目对象归 MEDRAG_ADMIN，v1 MEDICAL_RAG 不改。
 
 ## 官方参考
 

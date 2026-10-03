@@ -6,12 +6,12 @@
 
 - `docs/architecture.md`：设计，以它为准；冲突先说明，不擅自改方向。
 - `.harness/context/current-state.md`：已实现、已验证和下一步。
-- 改入库读 `.harness/rules/pipeline-rules.md`；用户动手的位置看 `docs/hands-on.md`。
+- 改入库读 `.harness/rules/pipeline-rules.md`；用户动手的位置看 `.harness/context/implementation.md`。
 - 交付前看 `.harness/checklists/verification.md`；排错看 `docs/pitfalls.md`。
 
 ## 当前范围
 
-先跑通 Azure 上传 → 解析、切分 → Cortex Search → 带引用的回答。配置、判断变更、删旧块用最简版；切分基线为直接 recursive + overlap，使用 Snowflake 默认分隔符；重试、边界情况、自动数据检查、评测和应用放到跑通以后。文档和注释保持简洁，不提前设计未实现的模块。
+先跑通 Azure 上传 → 解析、切分 → Cortex Search → 带引用的回答。配置、判断变更、删旧块用最简版；切分基线为直接 recursive + overlap，使用 Snowflake 默认分隔符；重试、边界情况、自动数据检查、评测和应用放到跑通以后。项目文档保持简洁；代码注释当前保留易懂的语法和流程解释，便于学习，熟悉后再收简。不提前设计未实现的模块。
 
 核心步骤由 agent 搭骨架，用户写捕获、解析、切分、task；用户明确要求代改时按请求做。示范用同类小例子，不代写用户那一题。空用 `你来写` / `到这里` 标记，里面用 `RAISE not_implemented;`；没填也能部署，调用时抛 NOT_IMPLEMENTED。一次推进一步并汇报，不主动填下一步。
 

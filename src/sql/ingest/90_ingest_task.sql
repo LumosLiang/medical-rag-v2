@@ -17,3 +17,8 @@ create or alter task INGEST.INGEST_TASK
     SYSTEM$STREAM_HAS_DATA('INGEST.CORPUS_STREAM')
   as
     call INGEST.RUN_INGEST();
+
+
+-- 手工查看 task：选中下面的语句单独执行，不随部署运行。
+-- show tasks like '%INGEST%';
+-- desc task MEDRAG.INGEST.INGEST_TASK;

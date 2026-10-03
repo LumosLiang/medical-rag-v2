@@ -11,6 +11,6 @@
 - 切分的删除和写入在同一个事务里；块表只用增量 DML，不重建。配置参数不可原地改，换参数新建配置名。
 - CHUNK_DOC 统一校验配置和事务，按 `chunk_method` 调用同签名的 `CORE.CHUNK_<METHOD>`；算法过程只做 INSERT，不开启自己的事务。
 - 各策略的块共用 CORE.CHUNKS，以 config_name 区分；每个检索服务只筛选一个配置，服务名后缀对应该配置名。当前只部署基线服务。
-- stage 先建且 REFRESH_ON_CREATE=FALSE，再建 stream，再 REFRESH；当前 stage 已部署，task 已部署、暂停。留意 SHOW STREAMS 的 STALE_AFTER，不把默认保留期当成固定保证。
+- stage 先建且 REFRESH_ON_CREATE=FALSE，再建 stream，再 REFRESH；stage 和 task 已部署，运行状态见 current-state。留意 SHOW STREAMS 的 STALE_AFTER，不把默认保留期当成固定保证。
 
 自动数据检查、失败重试、完整前缀和参考文献处理在跑通后做。出处见 architecture 的官方参考，实测限制见 `docs/pitfalls.md`。

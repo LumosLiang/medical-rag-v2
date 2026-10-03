@@ -1,5 +1,5 @@
 -- 账户级引导:项目专用角色、库、账户级权限。用 ACCOUNTADMIN 执行,可以重复执行。
---   snow sql -f setup/00_role_and_database.sql
+--   snow sql -f infra/snowflake/setup/00_role_and_database.sql
 -- 必须在 01_azure_integrations.sql 之前执行:那里把两个集成的 USAGE 授给这里建的角色。
 --
 -- MEDRAG_ADMIN 拥有 MEDRAG 库和里面的所有对象,task 按它的权限运行,不带 ACCOUNTADMIN 的全部权限。
