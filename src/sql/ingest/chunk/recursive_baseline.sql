@@ -36,12 +36,15 @@ BEGIN
      WHERE p.relative_path = :p_relative_path
        AND p.etag = :p_etag
        AND p.error_message IS NULL
-  ), numbered AS (
+  ),
+
+  numbered AS (
     SELECT doc_id, page_index, chunk_text,
            ROW_NUMBER() OVER (ORDER BY page_index, piece_index) - 1 AS chunk_index
       FROM pieces
      WHERE NULLIF(TRIM(chunk_text), '') IS NOT NULL
   )
+
   SELECT SHA2(:p_relative_path || '|' || :p_etag || '|' || :p_config_name || '|' || chunk_index::VARCHAR, 256),
          doc_id, :p_relative_path, :p_etag, :p_config_name, chunk_index,
          NULL, chunk_text, chunk_text,

@@ -6,11 +6,11 @@
 - 消费 stream 用 INSERT SELECT；普通 SELECT 不消费。stream 只交给一个消费者。
 - FILE_CHANGES 每条变更一行，以 `(relative_path, etag)` 识别版本，etag 保留 directory table 原值（含双引号）。PENDING → TO_PARSE / TO_REMOVE → DONE / FAILED。
 - RUN_INGEST 按捕获、判断、删旧块、解析、切分的顺序调用；每一步处理所有输入状态的行，各步分开提交。
-- 解析只调用一次，保存完整输出后再展开；成功版本再次调用跳过。切分只读 PARSED_DOCS 的 `parse_result:value:pages`，按页切并保留页码。
+- 解析只调用一次，保存完整输出后再展开；成功版本再次调用跳过。切分只读 PARSED_DOCS 的 `parse_result:value:pages`，基线按页切并保留页码；章节表格策略规范化后拼接全文，通过字符范围回算页码。
 - `recursive_once_1200_200` 为当前基线：每页只做一次 recursive 切分，none 格式、1200 字符 / 200 字符 overlap，separators 用 Snowflake 默认；token_count 仅作观察，不因超过 512 而失败。`recursive_resplit_to_512_tokens_1200_200` 是补切改进版，超限时递归缩小尺寸。旧配置 `recursive_1200_200` 及其历史块保留。两种新配置不加前缀、不去参考文献；chunk_id 唯一且重跑不变，不能有空块。
 - 切分的删除和写入在同一个事务里；块表只用增量 DML，不重建。配置参数不可原地改，换参数新建配置名。
-- CHUNK_DOC 统一校验配置和事务，按 `chunk_method` 调用同签名的 `CORE.CHUNK_<METHOD>`；算法过程只做 INSERT，不开启自己的事务。
-- 各策略的块共用 CORE.CHUNKS，以 config_name 区分；每个检索服务只筛选一个配置，服务名后缀对应该配置名。当前只部署基线服务。
+- CHUNK_DOC 统一校验配置和事务，按 `chunk_method` 调用同签名的 `CORE.CHUNK_<METHOD>`；算法过程生成块、做策略特有的验收并 INSERT，不开启自己的事务；超限策略自行检查 max_tokens 并抛异常，由 CHUNK_DOC 回滚。
+- 各策略的块共用 CORE.CHUNKS，以 config_name 区分；每个检索服务只筛选一个配置，服务名后缀对应该配置名。新策略保持 inactive，固定快照回填和评测；日常 ingest 仍只用基线。
 - stage 先建且 REFRESH_ON_CREATE=FALSE，再建 stream，再 REFRESH；stage 和 task 已部署，运行状态见 current-state。留意 SHOW STREAMS 的 STALE_AFTER，不把默认保留期当成固定保证。
 
 自动数据检查、失败重试、完整前缀和参考文献处理在跑通后做。出处见 architecture 的官方参考，实测限制见 `docs/pitfalls.md`。

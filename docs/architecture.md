@@ -33,15 +33,23 @@ PDF 保留在 Azure，不额外复制进 Snowflake 内部 stage。解析结果�
 当前默认配置为 `recursive_once_1200_200`：每页调用一次 recursive 切分，格式 `none`，1200 字符、200 字符 overlap，省略 separators 参数以使用 Snowflake 默认分隔符。记录 `token_count`，但超出 512 token 不再补切或让入库失败。`recursive_resplit_to_512_tokens_1200_200` 是改进策略：超限块反复缩小尺寸补切，直到不超过 512 token；若无法达标才报错。已部署的旧名 `recursive_1200_200` 及其历史块保留，不改名。前缀和去参考文献暂时关闭。换策略或参数新建配置名，入库只用唯一 active 配置。
 
 CORE.CHUNKS 存放各策略的块，以 config_name 区分；chunk_id 包含配置名，确定且唯一。表只做增量 DML，开启 CHANGE_TRACKING；切分过程删除同版本同配置的旧块、写新块放在一个事务里。
-`CHUNK_DOC` 通过 `chunk_method` 调用对应的 `CORE.CHUNK_<METHOD>` 过程；每个算法接受同一组参数，只负责生成和插入块。配置检查、删旧块、事务及通用验收留在 `CHUNK_DOC`。新算法增加独立过程和配置，不扩写切分入口。
+`CHUNK_DOC` 通过 `chunk_method` 调用对应的 `CORE.CHUNK_<METHOD>` 过程；每个算法接受同一组参数，负责生成、插入块和策略特有的验收。配置检查、删旧块、事务及通用验收留在 `CHUNK_DOC`。新算法增加独立过程和配置，不扩写切分入口。
 
 ## 检索与部署
 
-每个切分配置对应独立 Cortex Search 服务，服务名采用 `MEDICAL_CHUNKS_<CONFIG_NAME>`。当前只部署 `MEDICAL_CHUNKS_RECURSIVE_ONCE_1200_200`，源查询固定筛选 `recursive_once_1200_200`，主键为 chunk_id，模型与 token_model 一致。其他策略的块可共存于同一表，需要检索时再建对应服务，并确保该配置覆盖同一批文件版本。切换 active 配置不会自动重切历史文件，也不会改变已有服务的源查询。基线块超过模型的 512-token 窗口时，语义向量只使用截断部分，关键词检索仍使用全文。应用通过 RAG_CONFIG_NAME 选择相应服务，不更改入库 active 配置。评测稍后实现。
+每个切分配置有独立的基础 Cortex Search 服务，服务名采用 `MEDICAL_CHUNKS_<CONFIG_NAME>`；同一批块也可建立不同搜索服务做检索层对照，不新增切分配置。默认使用 `MEDICAL_CHUNKS_RECURSIVE_ONCE_1200_200`，源查询固定筛选 `recursive_once_1200_200`，主键为 chunk_id，模型与 token_model 一致。章节表格实验已部署独立服务 `MEDICAL_CHUNKS_MARKDOWN_HEADER_TABLE_1200_200`；其他策略的块可共存于同一表，需要检索时再建对应服务，并确保该配置覆盖同一批文件版本。切换 active 配置不会自动重切历史文件，也不会改变已有服务的源查询。基线块超过模型的 512-token 窗口时，语义向量只使用截断部分，关键词检索仍使用全文。应用通过 RAG_CONFIG_NAME 选择基础服务，不更改入库 active 配置；实验服务通过评测参数显式选择，未接入应用默认。评测题库及检索评测已实现，规则与运行记录见 `.harness/rules/eval-rules.md`；生成质量评测尚未实现。
+
+章节上下文检索对照复用 `markdown_header_table_1200_200` 的块：`MEDICAL_CHUNKS_MARKDOWN_HEADING_PREFIX_1200_200` 在源查询中生成最近一级标题加正文的 search_text，返回原始 chunk_text；`MEDICAL_CHUNKS_MARKDOWN_MULTI_INDEX_1200_200` 分别为正文和完整 section_path 建关键词索引，仅正文建向量索引，使用默认权重与重排。模型相同，不改 chunks、解析或题库。标题独立索引不等于标题注入正文 embedding，也不宣称 multi-index 重排内部会把字段按章节加正文拼接。前缀后的少量超窗文本只记录，避免为检索实验重新切分语料。
 
 应用与入库分开部署：本机使用 `compose.yaml`，SPCS 文件在 `deploy/spcs/`，不加入根目录 deploy.sql。前端只保存当前问题的结果；暂不将历史对话送入模型。运行说明见 `docs/deployment.md`。
 
 Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git 仓库对象部署，deploy.sql 记录 sha，执行入库和搜索各模块。实验语句不执行；task 创建时默认暂停，运行时需显式 RESUME；现有部署的运行状态见验收记录。项目对象归 MEDRAG_ADMIN，v1 MEDICAL_RAG 不改。
+
+## 评测
+
+题目依据原始 PDF 保存 doc_id、SHA256、物理页码、参考答案和证据，不绑定 PARSED_DOCS、chunk_id 或搜索配置。文字层仅辅助出题和定位，审核以 PDF 为准；表格使用多个 evidence_parts 保留表头、行标签和数值。
+
+审核修订写成新题，题集固定题目 ID；换题建立新题集。检索实验保存逐题 top-k 原始结果，分别统计文档命中、单块证据覆盖和当前配置的单块覆盖上限。证据覆盖目前采用启发式规则，不能等同于语义正确或生成质量；待修问题见 current-state。比较不同解析/切分/检索策略时，保持题集、语料文件版本和评分规则一致。
 
 ## 官方参考
 
@@ -52,3 +60,10 @@ Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git �
 - [COUNT_TOKENS](https://docs.snowflake.com/en/sql-reference/functions/count_tokens-snowflake-cortex)
 - [递归 CTE](https://docs.snowflake.com/en/sql-reference/constructs/with)
 - [Cortex Search](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-overview)
+
+
+## Markdown 表格策略
+
+新策略位于 `src/sql/ingest/chunk/markdown_header_table/`：逐页去空行和行尾空白，整篇拼接并记录页码偏移；结构 UDTF 提取 TEXT/TABLE；正文使用 Snowflake Markdown header splitter，表格按行组与 token 预算分组并重复表名、多层表头和组标签。计数使用与基线相同的 COUNT_TOKENS；最终硬上限由新算法过程检查，异常交给 CHUNK_DOC 回滚。
+
+新算法过程、固定快照回填与独立服务已验收，配置 `markdown_header_table_1200_200` 保持 inactive，不参与日常入库。少数完整表头加单行仍超限的候选块递归补切，此时不保证重复完整表头；后代保留母块页码范围与章节。第一道门槛和用户确认的限制见 `docs/experiments/markdown-table-gate.md`，最终回填与服务验收见 current-state。

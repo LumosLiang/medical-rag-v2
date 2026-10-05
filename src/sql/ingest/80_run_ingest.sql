@@ -66,7 +66,10 @@ BEGIN
       CALL CORE.CHUNK_DOC(:v_path, :v_etag, :v_config_name, 'MEDRAG.CORE.CHUNKS');
       UPDATE INGEST.FILE_CHANGES
          SET status = 'DONE', error_message = NULL, updated_at = CURRENT_TIMESTAMP()
-       WHERE batch_id = :v_row_batch AND relative_path = :v_path AND etag = :v_etag AND status = 'TO_PARSE';
+       WHERE batch_id = :v_row_batch
+         AND relative_path = :v_path
+         AND etag = :v_etag
+         AND status = 'TO_PARSE';
       v_done := v_done + 1;
     EXCEPTION
       WHEN OTHER THEN
@@ -74,7 +77,10 @@ BEGIN
         UPDATE INGEST.FILE_CHANGES
            SET status = 'FAILED', error_message = :v_error, retry_count = retry_count + 1,
                updated_at = CURRENT_TIMESTAMP()
-         WHERE batch_id = :v_row_batch AND relative_path = :v_path AND etag = :v_etag AND status = 'TO_PARSE';
+         WHERE batch_id = :v_row_batch
+           AND relative_path = :v_path
+           AND etag = :v_etag
+           AND status = 'TO_PARSE';
         v_failed := v_failed + 1;
     END;
   END FOR;

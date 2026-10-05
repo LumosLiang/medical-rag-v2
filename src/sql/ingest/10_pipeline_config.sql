@@ -70,6 +70,23 @@ SELECT 'recursive_resplit_to_512_tokens_1200_200', 'LAYOUT', TRUE, OBJECT_CONSTR
    SELECT 1 FROM PIPELINE_CONFIG WHERE config_name = 'recursive_resplit_to_512_tokens_1200_200'
  );
 
+-- 章节+表格实验：整篇拼接，正文按 header 切；表格重复上下文，少数超长块补切。
+-- 保持 inactive：只用于固定快照回填与评测，不改变日常入库。
+INSERT INTO PIPELINE_CONFIG (
+  config_name, parse_mode, page_split, split_headers, chunk_size_chars,
+  chunk_overlap_chars, max_tokens, token_model, resplit_chunk_size_chars,
+  drop_reference_sections, add_prefix, is_active, note, chunk_method, split_format
+)
+SELECT 'markdown_header_table_1200_200', 'LAYOUT', TRUE,
+       OBJECT_CONSTRUCT('#', 'h1', '##', 'h2', '###', 'h3'), 1200,
+       200, 512, 'snowflake-arctic-embed-l-v2.0', 1000,
+       FALSE, FALSE, FALSE,
+       'Whole document; native header split; tables target 450 tokens; oversized chunks recursively resplit',
+       'markdown_header_table', 'markdown'
+ WHERE NOT EXISTS (
+   SELECT 1 FROM PIPELINE_CONFIG WHERE config_name = 'markdown_header_table_1200_200'
+ );
+
 -- 每次部署只切换 active，不改任何已存在配置的参数或历史块。
 UPDATE PIPELINE_CONFIG
    SET is_active = (config_name = 'recursive_once_1200_200')

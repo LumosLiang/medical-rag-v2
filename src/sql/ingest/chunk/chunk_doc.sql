@@ -80,6 +80,8 @@ BEGIN
          :v_resplit_size, :v_max_tokens, :v_token_model, :v_method
     FROM CORE.PIPELINE_CONFIG
    WHERE config_name = :p_config_name;
+
+
   IF (v_method IS NULL OR NOT REGEXP_LIKE(v_method, '^[a-z][a-z0-9_]*$')) THEN
     RAISE wrong_method;
   END IF;

@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS INGEST.PARSED_DOCS (
 )
 COMMENT = 'medrag v2: raw AI_PARSE_DOCUMENT output per parse attempt; the only input when re-chunking';
 
-CREATE OR REPLACE PROCEDURE INGEST.PARSE_FILE(p_relative_path VARCHAR, p_etag VARCHAR, p_config_name VARCHAR)
+CREATE OR REPLACE PROCEDURE INGEST.PARSE_FILE(
+  p_relative_path VARCHAR,
+  p_etag          VARCHAR,
+  p_config_name   VARCHAR
+)
 RETURNS VARCHAR
 LANGUAGE SQL
 COMMENT = 'medrag v2: parse one file version with AI_PARSE_DOCUMENT into PARSED_DOCS; skips versions already parsed'
@@ -39,7 +43,9 @@ BEGIN
   -- 同一版本之前已经解析成功,就不再解析:解析按页计费(docs/pitfalls.md)。
   SELECT COUNT(*) INTO :v_ok_count
     FROM INGEST.PARSED_DOCS
-   WHERE relative_path = :p_relative_path AND etag = :p_etag AND error_message IS NULL;
+   WHERE relative_path = :p_relative_path
+     AND etag = :p_etag
+     AND error_message IS NULL;
   IF (v_ok_count > 0) THEN
     RETURN 'SKIPPED: already parsed';
   END IF;
@@ -60,7 +66,9 @@ BEGIN
     TRUE
   ) INTO :v_parse_result;
 
-  INSERT INTO INGEST.PARSED_DOCS(relative_path, etag, doc_id, parse_options, parse_result, page_count, error_message)
+  INSERT INTO INGEST.PARSED_DOCS (
+    relative_path, etag, doc_id, parse_options, parse_result, page_count, error_message
+  )
   SELECT :p_relative_path, :p_etag, REPLACE(:p_relative_path, '.pdf', ''),
          :v_options, :v_parse_result,
          :v_parse_result:metadata:pageCount::NUMBER,
@@ -71,7 +79,9 @@ BEGIN
   -- 你的代码跑完,还没有成功的行,就抛异常,让 RUN_INGEST 把这条变更标成 FAILED。
   SELECT COUNT(*) INTO :v_ok_count
     FROM INGEST.PARSED_DOCS
-   WHERE relative_path = :p_relative_path AND etag = :p_etag AND error_message IS NULL;
+   WHERE relative_path = :p_relative_path
+     AND etag = :p_etag
+     AND error_message IS NULL;
   IF (v_ok_count = 0) THEN
     RAISE parse_failed;
   END IF;

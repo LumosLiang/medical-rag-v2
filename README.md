@@ -21,6 +21,7 @@ infra/            Azure Terraform 与 Snowflake 初始化
 deploy/          Docker 镜像与 SPCS 部署文件
 config/           配置示例
 tests/           Python 单元测试与手工 SQL 验收
+scripts/         语料下载、检查与手工操作 SQL
 docs/            架构、部署与设计记录
 ```
 
@@ -28,11 +29,12 @@ docs/            架构、部署与设计记录
 
 ## 当前状态
 
-Azure 事件链路、入库过程、两种切分策略与基线搜索服务已部署，上传自动触发已验证。前后端、模型调用及 Docker 基础代码已准备，应用检索接口和会话状态管理尚待实现；SPCS 尚未部署。
+Azure 事件链路、入库过程、三种切分策略及四个搜索服务已部署；日常入库和应用默认仍使用 recursive 基线。上传自动触发已验证，固定题集的检索评测已运行。前后端、模型调用及 Docker 基础代码已准备，应用检索接口和会话状态管理尚待实现；SPCS 尚未部署。
 
 ## 运行与文档
 
 - [部署与本机运行](docs/deployment.md)
+- [语料与操作工具](scripts/README.md)
 - [架构与数据约定](docs/architecture.md)
 - [设计决定](docs/decisions.md)、[排错记录](docs/pitfalls.md)、[后续计划](docs/roadmap.md)
 

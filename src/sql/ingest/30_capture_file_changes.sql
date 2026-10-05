@@ -55,9 +55,12 @@ BEGIN
   -- 用到 stream 的文件列和 METADATA$ACTION、METADATA$ISUPDATE;status 不用填,默认 PENDING。
   -- 这条 DML 一提交,stream 就前进(环节 1 在 SPIKE_STREAM 上练过同样的消费)。
 
-  insert into INGEST.FILE_CHANGES(batch_id, relative_path, etag, size, last_modified, change_action, is_update)
-  select :p_batch_id, relative_path, etag, size, last_modified::TIMESTAMP_LTZ, METADATA$ACTION, METADATA$ISUPDATE
-    from INGEST.CORPUS_STREAM;
+  INSERT INTO INGEST.FILE_CHANGES (
+    batch_id, relative_path, etag, size, last_modified, change_action, is_update
+  )
+  SELECT :p_batch_id, relative_path, etag, size, last_modified::TIMESTAMP_LTZ,
+         METADATA$ACTION, METADATA$ISUPDATE
+    FROM INGEST.CORPUS_STREAM;
 
   -- ===== 到这里 =====
 

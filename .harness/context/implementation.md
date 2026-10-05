@@ -9,4 +9,4 @@
 
 先完成检索，再启用生成回答。当前只保存本次结果，不把历史对话传给模型。代码注释保留学习所需的语法解释，未实现部分可启动，调用时提示未实现。
 
-运行方式见 `docs/deployment.md`；实际验收见 `current-state.md`。切分和检索的手工 SQL 位于 `tests/sql/`。
+运行方式见 `docs/deployment.md`；实际验收见 `current-state.md`。切分和检索的手工 SQL 位于 `tests/sql/checks/`(验收)和 `scripts/sql/`(回填、跑实验)。

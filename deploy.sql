@@ -52,9 +52,22 @@ EXECUTE IMMEDIATE FROM './src/sql/ingest/60_parse_documents.sql';
 EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/chunk_doc.sql';
 EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/recursive_baseline.sql';
 EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/recursive_token_limited.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/markdown_header_table/normalize_pages.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/markdown_header_table/split_table_spans.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/markdown_header_table/pack_table_rows.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/markdown_header_table/locate_chunks.sql';
+EXECUTE IMMEDIATE FROM './src/sql/ingest/chunk/markdown_header_table/chunk.sql';
 EXECUTE IMMEDIATE FROM './src/sql/ingest/80_run_ingest.sql';
 EXECUTE IMMEDIATE FROM './src/sql/ingest/90_ingest_task.sql';
 EXECUTE IMMEDIATE FROM './src/sql/search/10_cortex_search.sql';
+EXECUTE IMMEDIATE FROM './src/sql/search/20_markdown_header_table_search.sql';
+EXECUTE IMMEDIATE FROM './src/sql/search/30_markdown_heading_prefix_search.sql';
+EXECUTE IMMEDIATE FROM './src/sql/search/40_markdown_multi_index_search.sql';
+EXECUTE IMMEDIATE FROM './src/sql/eval/10_eval_tables.sql';
+EXECUTE IMMEDIATE FROM './src/sql/eval/20_snapshot_corpus.sql';
+EXECUTE IMMEDIATE FROM './src/sql/eval/30_draft_questions.sql';
+EXECUTE IMMEDIATE FROM './src/sql/eval/40_import_review.sql';
+EXECUTE IMMEDIATE FROM './src/sql/eval/50_retrieval_eval.sql';
 
 -- 上面的文件会切换 schema,这里切回来。
 USE DATABASE MEDRAG;

@@ -1,9 +1,0 @@
--- 部署并重切基线语料后，手工预览检索结果；把 query 换成你想问的医学问题。
-USE ROLE MEDRAG_ADMIN;
-USE DATABASE MEDRAG;
-USE WAREHOUSE MEDICAL_RAG_INDEX_WH;
-
-SELECT PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
-    'MEDRAG.CORE.MEDICAL_CHUNKS_RECURSIVE_ONCE_1200_200',
-    '{"query":"clinical outcomes","columns":["CHUNK_ID","RELATIVE_PATH","PAGE_START","CHUNK_TEXT"],"limit":5}'
-  )):results AS results;
