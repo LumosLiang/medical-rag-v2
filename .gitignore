@@ -27,8 +27,7 @@ dist/
 # 只在本机用的东西:实验脚本、辅助工具、语料数据。scripts/ 里只有 CI 要跑的提交前检查进仓库。
 spike/
 data/
-scripts/*
-!scripts/check_forbidden.sh
+scripts/
 
 # macOS
 .DS_Store
