@@ -13,7 +13,9 @@ EXECUTE IMMEDIATE FROM @MEDRAG.OPS.REPO/branches/main/deploy.sql
   USING (stage_base_url => '<stage_base_url>');
 ```
 
-`stage_base_url` 取自 `terraform -chdir=infra/azure output -raw stage_base_url`。入口按顺序执行 `src/sql/` 下的模块，并在 `OPS.DEPLOY_LOG` 记录提交与状态；初始化脚本和手工验收 SQL 不包含在其中。任务的启动状态需单独核对。
+`stage_base_url` 取自 `terraform -chdir=infra/azure output -raw stage_base_url`。入口按顺序执行 `src/ingestion/sql/`、`src/serving/sql/` 和 `eval/dataset/`、`eval/retrieval/` 下的模块，并在 `OPS.DEPLOY_LOG` 记录提交与状态；初始化脚本和手工验收 SQL 不包含在其中。任务的启动状态需单独核对。
+
+当前环境中部分 EVAL 对象仍由 ACCOUNTADMIN 持有，snapshot 模块还有混合所有者。本轮本机 CLI 部署按原所有者分别执行，没有变更权限；根 Git 入口统一使用 MEDRAG_ADMIN，尚未验收这批评测模块。通过该入口完整部署前需要先解决评测对象的所有权与访问权限，不能把逐模块部署成功当成 Git 入口已通过。
 
 ## 本机 Docker
 
@@ -41,11 +43,13 @@ python3.12 -m venv .venv
 .venv/bin/python -m pip install -e '.[api,ui,dev]'
 ```
 
+已有虚拟环境在目录迁移后也需重新执行安装命令，使包路径指向 `src/serving/`；Docker 使用新目录时重新构建镜像。
+
 在两个终端分别运行：
 
 ```sh
 SNOWFLAKE_CONNECTION_NAME='<本机连接名>' .venv/bin/uvicorn medical_rag.backend.api:app --reload
-.venv/bin/streamlit run src/medical_rag/frontend/app.py
+.venv/bin/streamlit run src/serving/medical_rag/frontend/app.py
 ```
 
 不指定连接名时，后端读取 Snowflake 环境变量；Python 直接启动不会自动加载 `.env`，需先在终端设置。单元测试使用 `.venv/bin/python -m pytest`，只验证本地参数和引用处理。
@@ -67,6 +71,20 @@ snow sql -c '<本机连接名>' -f deploy/spcs/deploy.sql
 ```
 
 升级使用新镜像标签，并同步 `service.yaml`，通过 PUT 和 ALTER SERVICE 更新服务。部署后核对容器状态、公开端点及一次完整检索；当前尚未做 SPCS 运行验收。
+
+## 本机辅助工具
+
+当前 .gitignore 忽略整个 scripts/；以下语料工具和 SQL 模板仅保留在已有本机工作区，新 clone 不会包含它们。scripts/check_forbidden.sh 已被 Git 跟踪，忽略规则不影响它继续供 CI 使用。
+
+| 本机文件 | 用途 |
+|---|---|
+| scripts/fetch_sample_pdfs.py | 初始样本下载，以及其他语料工具复用的来源检查与请求函数 |
+| scripts/fetch_corpus.py | 正式语料按批次下载，依赖样本工具 |
+| scripts/check_corpus.py | 文件、来源与分布检查，依赖上述两个工具 |
+| scripts/sql/backfill_snapshot.sql | 固定快照按配置回填，执行前调整 SET 参数 |
+| scripts/sql/run_experiment.sql | 运行检索实验，指定题集、服务和新的实验 ID |
+
+数据与人工审核历史在忽略的 data/；上述工具不是部署入口。正式验收 SQL 在 tests/sql/checks/，单元测试在 tests/unit/，两者纳入版本管理。
 
 ## 官方参考
 

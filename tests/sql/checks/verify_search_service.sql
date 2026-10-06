@@ -25,7 +25,7 @@ SELECT PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
            "limit": 5}'
        )):results AS results;
 
--- 4. 仅对标题前缀服务(30_markdown_heading_prefix_search.sql):加前缀后超过 512 token 的块数。
+-- 4. 仅对标题前缀服务(30_heading_prefix.sql):加前缀后超过 512 token 的块数。
 --    embedding 会截断超窗部分,这个数应很小并记进实验 params。
 SELECT COUNT_IF(SNOWFLAKE.CORTEX.COUNT_TOKENS(
          'snowflake-arctic-embed-l-v2.0',

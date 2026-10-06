@@ -1,6 +1,6 @@
 -- 单篇切分验收:用任一配置切固定快照里的一篇文档,再逐块查看。
 -- 只写这一篇、这个配置的块(CHUNK_DOC 对同版本同配置先删后写),不碰别的配置。
--- 前提:src/sql/ingest/chunk/ 下的过程已部署。改下面三个 SET 即可换文档或配置。
+-- 前提:src/ingestion/sql/chunk/ 下的过程已部署。改下面三个 SET 即可换文档或配置。
 USE ROLE MEDRAG_ADMIN;
 USE DATABASE MEDRAG;
 USE WAREHOUSE MEDICAL_RAG_PARSE_WH;

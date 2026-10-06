@@ -11,6 +11,8 @@ terraform -chdir=infra/azure validate
 
 再看 git status、部署顺序、调用方和文档链接。实验语句保留为注释；用户未填写的核心步骤仍留空。
 
+目录迁移时核对 setuptools 与 pytest 的 `src/serving` 路径、Docker COPY 和前端启动路径，以及 deploy.sql 引用的 ingestion、serving、eval/dataset 与 eval/retrieval 模块；现有虚拟环境需重新安装项目。
+
 应用检查：`.venv/bin/python -m pytest`，Docker 启动后检查 `/healthz` 和前端页面。骨架未填写处允许返回 501；完整 HTTP → 检索链路应在用户填写后另做验收。SPCS 部署与入库部署分开。
 
 ## Snowflake
@@ -41,4 +43,13 @@ terraform -chdir=infra/azure validate
 - `scripts/sql/run_experiment.sql`：同一 config、原 50 题、相同模型和评分；每次 500 行且 finished_at 有值。评分用原 chunk_text，不用注入标题后的 search_text。
 - 两个模块重复部署已实测跳过现有服务；应用仍默认基线。
 - 权重对照:scoring_config 作为第 7 个参数传入,完整落进 params,源块哈希不变;六参数入口默认重跑与原指标一致。已实跑 8 组,各 50 题/500 行。
-- 结果只写在 docs/experiments/(markdown-search-context.md、multi-index-tuning.md)。
+- 结果只写在 docs/experiments/(chunking.md、search.md)。
+
+## 本次重构的运行验收
+
+- RUN_INGEST：无 active 或多个 active 时，在 CAPTURE_CHANGES 前报错；唯一 active 时使用该行，不按名字排序。
+- 配置脚本重跑保留原 active 选择；已有配置参数与历史块不改。旧 chunk_method 通过 compatibility.sql 转调 CHUNK_STRUCTURED_MARKDOWN。
+- structured_markdown：Markdown 表名不改正文章节，转义管道保留；新 helper 按部署顺序建立后验证单篇文本、章节与页码。完整续表、脚注和合并单元格仍是限制，不宣称全部解决。
+- 指标：完成实验的零返回题计入分母，未完成实验排除；词袋规则 v2 保持原样。已用原题集重跑检索对照，保留原实验；指标边界在 Snowflake 合成输入验收。
+
+本轮已完成 CLI 部署、三篇临时重切及五组检索对照。基线完全复现，其余组存在排名差异；原生重复请求也复现变化。结果与限制见 docs/experiments/search.md，不将历史指标完全一致作为已通过项；正式全库块和 Git 仓库部署入口未重新执行。

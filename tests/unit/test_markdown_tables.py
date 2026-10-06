@@ -2,7 +2,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULES = ROOT / 'src/sql/ingest/chunk/markdown_header_table'
+MODULES = ROOT / 'src/ingestion/sql/chunk/structured_markdown'
 
 
 def handler(name):
@@ -12,11 +12,11 @@ def handler(name):
 
 
 def spans(text):
-    return list(handler('split_table_spans')['SplitTableSpans']().process(text))
+    return list(handler('extract_elements')['SplitTableSpans']().process(text))
 
 
 def test_normalize_offsets_and_empty_page():
-    result = handler('normalize_pages')['normalize']([
+    result = handler('prepare_document')['normalize']([
         {'index': 2, 'content': ' B  \n\nC\r\n'},
         {'index': 0, 'content': '# A\n\ntext  '},
         {'index': 1, 'content': '\n '},
@@ -53,7 +53,7 @@ def test_packing_repeats_context_without_losing_data_rows():
     table['prefix_tokens'] = 10
     for row in table['rows']:
         row['tokens'] = 10
-    packed = list(handler('pack_table_rows')['PackTableRows']().process(table, 30))
+    packed = list(handler('build_table_chunks')['PackTableRows']().process(table, 30))
     assert len(packed) == 2
     for _, text, start, end in packed:
         assert text.startswith(table['prefix'])
@@ -74,7 +74,7 @@ def test_header_only_table_keeps_exact_range():
     text = 'Table 1. Empty\n| X | Y |\n| --- | --- |'
     table = spans(text)[0][5]
     table['prefix_tokens'] = 12
-    packed = list(handler('pack_table_rows')['PackTableRows']().process(table, 450))
+    packed = list(handler('build_table_chunks')['PackTableRows']().process(table, 450))
     assert len(packed) == 1
     assert packed[0][3] == len(text)
     assert packed[0][1] == text
@@ -82,7 +82,7 @@ def test_header_only_table_keeps_exact_range():
 
 def locate(text, candidates, pages=None):
     document = {'text': text, 'pages': pages or [{'page': 0, 'start': 0, 'end': len(text)}]}
-    return list(handler('locate_chunks')['LocateChunks']().process(document, candidates))
+    return list(handler('annotate_chunks')['LocateChunks']().process(document, candidates))
 
 
 def text_candidate(text, span_start=0, span_end=1000, span_index=0, headers=None):
@@ -117,3 +117,39 @@ def test_locator_fallback_uses_span_pages_and_header_merge():
     result = locate(text, [text_candidate('rewritten content', start, len(text), 1, {'h3': 'New'})],
                     [{'page': 0, 'start': 0, 'end': start}, {'page': 1, 'start': start, 'end': len(text)}])
     assert result[0][2:] == ('Results > Outcomes > New', 1, 1, False)
+
+
+def test_markdown_table_caption_is_not_a_section_for_table_or_following_text():
+    text = '# Results\n## Outcomes\n### Table 2. Mortality\n| A | B |\n| --- | --- |\n| x | 7 |\nFollowing text'
+    start = text.index('| x |')
+    result = locate(text, [
+        {'kind': 'TABLE', 'text': '| x | 7 |', 'start': start, 'end': start + 9},
+        text_candidate('Following text'),
+    ])
+    assert [row[2] for row in result] == ['Results > Outcomes', 'Results > Outcomes']
+
+
+def test_fallback_does_not_replace_section_with_table_caption():
+    text = '# Results\n## Outcomes\n### Table 2. Mortality\nData'
+    start = text.index('Data')
+    result = locate(text, [text_candidate(
+        'rewritten', start, len(text), headers={'h3': 'Table 2. Mortality'}
+    )])
+    assert result[0][2] == 'Results > Outcomes'
+
+
+def test_escaped_pipe_at_end_of_cell_is_preserved():
+    parse_cells = handler('extract_elements')['cells']
+    assert parse_cells(r'| Group | text\|') == ['Group', r'text\|']
+    assert parse_cells(r'| Group | text\| |') == ['Group', r'text\|']
+
+
+def test_repeated_table_group_label_keeps_its_source_page():
+    table = spans('Table 1. Test\n| X | Y |\n| --- | --- |\n| Group A | |\n| a | 1 |\n| b | 2 |')[0][5]
+    table['prefix_tokens'] = 10
+    for row in table['rows']:
+        row['tokens'] = 10
+    packed = list(handler('build_table_chunks')['PackTableRows']().process(table, 30))
+    # 第二块重复了更早页的 Group A，不能只引用 b 所在的页。
+    assert packed[1][2] == table['rows'][0]['start']
+    assert packed[1][3] == table['rows'][-1]['end']

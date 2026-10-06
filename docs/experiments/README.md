@@ -1,19 +1,10 @@
 # 实验记录
 
-实验数字只写在本目录；其它文档只写结论并链接到这里。
-所有实验都在同一条件下：快照 `corpus_2026_10_03`(209 篇)、题集 `qset_v1`(50 题)、评分 `evidence_covered_v2`、top-k = 10。
-50 题时 Hit@5 的 95% 置信区间约 ±10 个百分点，几题之差要结合逐题结果看。
+实验回答两个问题：切分是否保住证据，以及检索是否把证据块排在前面。语料统一为 corpus_2026_10_03（209 篇），题集 qset_v1（50 题），评分 evidence_covered_v2，top-k=10。v1 语料不同，不参与比较。
 
-| 实验 ID | 改了什么 | Hit@1 | Hit@5 | Hit@10 | MRR | 单块上限 | 详情 |
-|---|---|---|---|---|---|---|---|
-| `baseline_once_1200_200_k10_20261004_complete` | 基线：逐页 recursive 1200/200，默认权重 | 0.28 | 0.68 | 0.74 | 0.439 | 0.86 | [markdown-table-gate](markdown-table-gate.md) |
-| `markdown_header_table_1200_200_k10_20261004` | 整篇拼接 + 按标题切 + 表格单独分组；标题不进检索文本 | 0.28 | 0.62 | 0.80 | 0.442 | 0.94 | [markdown-table-gate](markdown-table-gate.md) |
-| `markdown_heading_prefix_k10_20261004` | 同一批块；检索文本 = 最近一级标题 + 正文 | 0.36 | 0.66 | 0.80 | 0.490 | 0.94 | [markdown-search-context](markdown-search-context.md) |
-| `markdown_multi_index_k10_20261004` | 同一批块；关键词索引正文 + 章节路径，向量只索引正文 | 0.38 | 0.74 | 0.84 | 0.529 | 0.94 | [markdown-search-context](markdown-search-context.md) |
-| `multi_tune_rerank_section_k10_20261004` | multi-index + 权重 1:1:3、章节关键词 3 | 0.46 | 0.82 | 0.86 | 0.593 | 0.94 | [multi-index-tuning](multi-index-tuning.md) |
+- [切分对照](chunking.md)：recursive 基线与章节表格策略，包含表格覆盖诊断和实现取舍。
+- [检索对照](search.md)：正文、标题前缀、multi-index 与八组查询权重。
 
-`multi_tune_*` 其余 7 组见 multi-index-tuning.md。权重调参是在同一批 50 题上选出来的，属于探索结果，需要独立新题验证。
+以下是 2026-10-04 已完成实验的结果。2026-10-06 修正了代码中的章节归属及指标分母，并完成 CLI 部署与五组检索复验；正式块未回填，不能把原块成绩说成修复后全库回填的成绩。基线完全复现，其余组有原生检索排名波动，前后数值与诊断见检索对照的“重构部署复验”。两题证据表名和词袋评分限制保留；同批 50 题上的权重选择属于探索。
 
-账户里另有三个实验记录不进上表：`baseline_once_1200_200_k10`(补入 PMC9883575 之前的旧基线，已被 `_complete` 取代)，以及两个 `*_rerun_20261004b`(重跑确认结果完全可复现)。
-
-新实验用 `scripts/sql/run_experiment.sql` 跑，跑完在上表加一行，并在对应文档写设置和结论。
+新实验使用 scripts/sql/run_experiment.sql，选择固定题集、服务、切分配置和明确的 scoring_config；用新 experiment_id 保存，不覆盖历史记录。实现见 [eval](../../eval/README.md)，索引与请求配置见 [serving](../../src/serving/README.md)。

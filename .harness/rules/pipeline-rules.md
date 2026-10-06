@@ -2,6 +2,8 @@
 
 设计以 `docs/architecture.md` 为准；当前先跑通，不提前加入重试和复杂状态判断。
 
+入库实现位于 `src/ingestion/sql/`，搜索服务与应用位于 `src/serving/`；评测独立位于根目录 `eval/`。
+
 - Event Grid → Queue → directory table → stream → task；队列只给 Snowflake 用，排错只 peek。
 - 消费 stream 用 INSERT SELECT；普通 SELECT 不消费。stream 只交给一个消费者。
 - FILE_CHANGES 每条变更一行，以 `(relative_path, etag)` 识别版本，etag 保留 directory table 原值（含双引号）。PENDING → TO_PARSE / TO_REMOVE → DONE / FAILED。

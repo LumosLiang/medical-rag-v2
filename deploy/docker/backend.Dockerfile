@@ -3,7 +3,7 @@ FROM ${PYTHON_IMAGE}
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY pyproject.toml /app/
-COPY src/medical_rag /app/src/medical_rag
+COPY src/serving/medical_rag /app/src/serving/medical_rag
 RUN --mount=type=cache,target=/root/.cache/pip pip install ".[api]" \
     && useradd --uid 1000 --create-home appuser
 USER appuser

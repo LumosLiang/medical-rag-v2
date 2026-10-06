@@ -1,5 +1,5 @@
 -- markdown_header_table 专用,只读:重算正文初次切分的定位率。
--- 表格位置直接由 SPLIT_TABLE_SPANS 给出,不在这里统计;补切后代保留母块范围,也不计为新的精确定位。
+-- 表格位置直接由 EXTRACT_MARKDOWN_ELEMENTS 给出,不在这里统计;补切后代保留母块范围,也不计为新的精确定位。
 -- 验收线:fallback_percent < 0.5,missing_pages = 0。
 USE ROLE MEDRAG_ADMIN;
 USE DATABASE MEDRAG;
@@ -11,7 +11,7 @@ SET config_name   = 'markdown_header_table_1200_200';
 
 WITH documents AS (
   SELECT d.doc_id,
-         CORE.NORMALIZE_MARKDOWN_PAGES(d.parse_result:value:pages::ARRAY) AS document,
+         CORE.PREPARE_MARKDOWN_DOCUMENT(d.parse_result:value:pages::ARRAY) AS document,
          c.split_headers, c.chunk_size_chars, c.chunk_overlap_chars
     FROM INGEST.PARSED_DOCS d
     JOIN EVAL.CORPUS_FILES f
@@ -34,7 +34,7 @@ candidates AS (
            'span_end', s.source_end
          ) AS candidate
     FROM documents d,
-         TABLE(CORE.SPLIT_TABLE_SPANS(d.document:text::VARCHAR)) s,
+         TABLE(CORE.EXTRACT_MARKDOWN_ELEMENTS(d.document:text::VARCHAR)) s,
          LATERAL FLATTEN(input => SNOWFLAKE.CORTEX.SPLIT_TEXT_MARKDOWN_HEADER(
            s.span_text, d.split_headers, d.chunk_size_chars, d.chunk_overlap_chars
          )) c
@@ -50,7 +50,7 @@ grouped AS (
 located AS (
   SELECT g.doc_id, l.*
     FROM grouped g,
-         TABLE(CORE.LOCATE_MARKDOWN_CHUNKS(g.document, g.pieces)) l
+         TABLE(CORE.ANNOTATE_CHUNK_LOCATIONS(g.document, g.pieces)) l
 )
 SELECT COUNT(*) AS text_candidates,
        COUNT_IF(NOT location_exact) AS span_range_fallback,

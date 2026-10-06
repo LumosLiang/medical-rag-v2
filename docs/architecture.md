@@ -1,69 +1,56 @@
-# 架构
+# 架构与设计取舍
 
-本阶段先跑通核心链路。实际进度只记在 `.harness/context/current-state.md`，下图包含尚未实现的步骤。
+项目面向以 PDF 为主、包含标题和表格的医学论文。PDF 保留在 Azure；Snowflake 保存解析结果、不同策略的块及检索索引。目标是文件变化自动进入检索，再通过前后端给出带证据引用的回答。事件入库和检索已验证，完整应用链路尚未实现。
 
-## 流程
+## 事件如何变成可检索文档
 
 ```text
-Azure ADLS Gen2 的 PDF 新增 / 覆盖 / 删除
-  → Event Grid → Storage Queue → Snowflake 通知集成
-  → CORPUS_STAGE 的 directory table 自动刷新
-  → CORPUS_STREAM → task → RUN_INGEST
-  → 捕获变更 → 判断变更 → 删旧块 → 解析 → 切分
-  → CORE.CHUNKS → Cortex Search → AI_COMPLETE 带引用的回答
+ADLS Gen2 中 PDF 新增 / 覆盖 / 删除
+  → Event Grid → Storage Queue → Snowflake notification integration
+  → stage directory table 自动刷新 → stream → task → RUN_INGEST
+  → FILE_CHANGES → 解析 / 删除旧块 / 切分 → CHUNKS → Cortex Search
+  → FastAPI → Streamlit 的答案与引用
 ```
 
-PDF 保留在 Azure，不额外复制进 Snowflake 内部 stage。解析结果和文本块落在 Snowflake 表里。入库用 SQL；应用采用 FastAPI、Streamlit，两个 Docker 容器，部署目标为 SPCS。
+storage integration 授权 Snowflake 读取 PDF；notification integration 授权读取事件队列。directory table 保存文件元数据，stream 记录其净变化，业务 SQL 不直接消费 Storage Queue。采用这条链路可以让对象存储与下游处理分离，文件不必再复制到 Snowflake 内部 stage。[官方 Azure 自动刷新流程](https://docs.snowflake.com/en/user-guide/data-load-dirtables-auto-azure)。
 
-前端通过 HTTP 调用 `/search` 或 `/ask`，不直接连接 Snowflake。后端使用 Cortex Search Python API 检索，AI_COMPLETE 生成回答；检索原文与页码一起返回前端。当前核心 API、前端 HTTP 和 session_state 尚待实现。SPCS 中只公开前端，由 Snowflake 认证；后端用挂载的 OAuth token 以服务所有者 MEDRAG_ADMIN 执行查询。各用户访问同一语料，尚无按用户分文档的权限设计。
+stream 是两次消费之间的净变化：已登记版本被覆盖时是一删一增；同一区间新增再删除可能没有行。CAPTURE_CHANGES 用 INSERT SELECT 消费这些变化并持久化，避免后续处理依赖 stream 重读。文件版本以 `(relative_path, etag)` 标识，batch_id 只标识一次捕获。
 
-## 入库约定
+## 入库各步骤的边界
 
-- stage 指向容器的 `pdf/`，文件名为 `<PMCID>.pdf`；传给 TO_FILE 的路径不再带 `pdf/`。
-- Azure 只发支持的 BlobCreated、BlobDeleted，使用 Event Grid schema。只逐个删文件、不重命名；Storage Queue 只由 Snowflake 消费。
-- `FILE_CHANGES` 每条文件变更一行，用 `(relative_path, etag)` 区分版本。
-- `CAPTURE_CHANGES` 用 INSERT SELECT 消费 stream，写 PENDING；`CLASSIFY_CHANGES` 把 DELETE 分到 TO_REMOVE，其余分到 TO_PARSE。
-- `REMOVE_OLD_CHUNKS` 先删 TO_REMOVE 版本的块，再设 DONE；`RUN_INGEST` 对 TO_PARSE 逐条解析、切分，最后设 DONE 或 FAILED。
-- 各步分开提交，不包成一个大事务；处理所有符合输入状态的行。当前不自动重试 FAILED。先删后写，新版本失败时文档会暂时不可检索。
+| 步骤 | 输入 → 输出 | 负责什么 |
+|---|---|---|
+| 捕获 | stream → PENDING | 保存变化，不决定处理策略 |
+| 分类 | PENDING → TO_PARSE / TO_REMOVE | 根据 INSERT / DELETE 分配动作 |
+| 删除 | TO_REMOVE → DONE | 删除该文件版本在所有配置下的旧块 |
+| 解析 | 文件版本 → PARSED_DOCS | 保存一次 AI_PARSE_DOCUMENT 原始结果 |
+| 切分 | 解析结果 + 配置 → CHUNKS | 不同策略共存，事务替换同版本同配置 |
+| 协调 | TO_PARSE → DONE / FAILED | 逐文件调用解析和切分，记录失败并继续 |
 
-## 解析和切分
+日常入库必须且只能有一个 active 配置，不按名字或创建时间猜“最新”。实验显式指定配置，切换 active 不会自动重切历史文件或更换搜索服务。配置参数按名称固定；新参数建立新配置。配置初始化只在没有 active 时选择基线，不在每次部署时覆盖运行选择。
 
-`PARSE_FILE` 从 PIPELINE_CONFIG 取 LAYOUT、page_split 参数，调用一次 AI_PARSE_DOCUMENT，完整结果先落 PARSED_DOCS。成功时 error_message 为 NULL；同一版本成功后再次调用跳过。切分只读解析表，不重复解析；当前按页切并保留 0 起始页码。
+各步骤分开提交，便于独立处理和排错；CHUNK_DOC 内部的删旧块与写新块处于同一事务。取舍是覆盖文件时先删旧版本，新版本解析失败会暂时不可检索；失败行当前不自动重试，任务由新 stream 变化触发。
 
-当前默认配置为 `recursive_once_1200_200`：每页调用一次 recursive 切分，格式 `none`，1200 字符、200 字符 overlap，省略 separators 参数以使用 Snowflake 默认分隔符。记录 `token_count`，但超出 512 token 不再补切或让入库失败。`recursive_resplit_to_512_tokens_1200_200` 是改进策略：超限块反复缩小尺寸补切，直到不超过 512 token；若无法达标才报错。已部署的旧名 `recursive_1200_200` 及其历史块保留，不改名。前缀和去参考文献暂时关闭。换策略或参数新建配置名，入库只用唯一 active 配置。
+## 为什么选择 LAYOUT
 
-CORE.CHUNKS 存放各策略的块，以 config_name 区分；chunk_id 包含配置名，确定且唯一。表只做增量 DML，开启 CHANGE_TRACKING；切分过程删除同版本同配置的旧块、写新块放在一个事务里。
-`CHUNK_DOC` 通过 `chunk_method` 调用对应的 `CORE.CHUNK_<METHOD>` 过程；每个算法接受同一组参数，负责生成、插入块和策略特有的验收。配置检查、删旧块、事务及通用验收留在 `CHUNK_DOC`。新算法增加独立过程和配置，不扩写切分入口。
+AI_PARSE_DOCUMENT 的 OCR 模式只提取文字，LAYOUT 同时提取布局和结构内容，并返回 Markdown。这里需要按标题切正文、让表头和数值保持关联，因此选择 LAYOUT；page_split 保留 0 起始物理页号，后续仍可拼接全文解决跨页切分。[官方模式定义](https://docs.snowflake.com/en/sql-reference/functions/ai_parse_document)。
 
-## 检索与部署
+取舍是依赖模型恢复的 Markdown：标题层级可能不准，复杂表格、脚注或数学符号仍可能解析错误。LAYOUT 不等于保留完整 PDF 版式，也不代表理解图片内容；当前没有启用图片提取或图像问答。若任务只需要普通文字而不需要结构，OCR 可以作为更简单的输出；本项目没有做 OCR / LAYOUT 的成本和质量对照，不能宣称哪一个普遍更优。
 
-每个切分配置有独立的基础 Cortex Search 服务，服务名采用 `MEDICAL_CHUNKS_<CONFIG_NAME>`；同一批块也可建立不同搜索服务做检索层对照，不新增切分配置。默认使用 `MEDICAL_CHUNKS_RECURSIVE_ONCE_1200_200`，源查询固定筛选 `recursive_once_1200_200`，主键为 chunk_id，模型与 token_model 一致。章节表格实验已部署独立服务 `MEDICAL_CHUNKS_MARKDOWN_HEADER_TABLE_1200_200`；其他策略的块可共存于同一表，需要检索时再建对应服务，并确保该配置覆盖同一批文件版本。切换 active 配置不会自动重切历史文件，也不会改变已有服务的源查询。基线块超过模型的 512-token 窗口时，语义向量只使用截断部分，关键词检索仍使用全文。应用通过 RAG_CONFIG_NAME 选择基础服务，不更改入库 active 配置；实验服务通过评测参数显式选择，未接入应用默认。评测题库及检索评测已实现，规则与运行记录见 `.harness/rules/eval-rules.md`；生成质量评测尚未实现。
+PARSED_DOCS 让切分实验复用同一次解析。当前成功缓存只按文件版本判断，换 parse_mode 不会自动重新解析；公平比较解析策略还需要独立的解析版本设计。
 
-章节上下文检索对照复用 `markdown_header_table_1200_200` 的块：`MEDICAL_CHUNKS_MARKDOWN_HEADING_PREFIX_1200_200` 在源查询中生成最近一级标题加正文的 search_text，返回原始 chunk_text；`MEDICAL_CHUNKS_MARKDOWN_MULTI_INDEX_1200_200` 分别为正文和完整 section_path 建关键词索引，仅正文建向量索引，使用默认权重与重排。模型相同，不改 chunks、解析或题库。标题独立索引不等于标题注入正文 embedding，也不宣称 multi-index 重排内部会把字段按章节加正文拼接。前缀后的少量超窗文本只记录，避免为检索实验重新切分语料。
+## 切分与检索解耦
 
-应用与入库分开部署：本机使用 `compose.yaml`，SPCS 文件在 `deploy/spcs/`，不加入根目录 deploy.sql。前端只保存当前问题的结果；暂不将历史对话送入模型。运行说明见 `docs/deployment.md`。
+所有策略写入 CORE.CHUNKS，以 config_name 区分，chunk_id 由文件版本、配置与块序号生成。CHUNK_DOC 负责输入检查、动态分派和事务，各算法只负责生成块及策略自己的验收，不把算法分支堆进入口。
 
-Azure 用 Terraform；setup 是一次性引导。日常 SQL 从 Snowflake Git 仓库对象部署，deploy.sql 记录 sha，执行入库和搜索各模块。实验语句不执行；task 创建时默认暂停，运行时需显式 RESUME；现有部署的运行状态见验收记录。项目对象归 MEDRAG_ADMIN，v1 MEDICAL_RAG 不改。
+基线逐页 recursive 一次，1200 字符、200 overlap、Snowflake 默认分隔符，token_count 仅观察；它简单可复现，但跨页证据或表格可能被切散。补切版在超过 512 token 时递归缩小尺寸，满足模型窗口，代价是更碎的块。章节表格策略拼接全文、分开正文和表格，尽量保住标题及数值归属，但仍受复杂表格启发式与窗口大小限制。具体流程和示例见 [章节表格策略](../src/ingestion/sql/chunk/structured_markdown/README.md)。
 
-## 评测
+Cortex Search 的四套索引分别比较基线、章节正文、标题前缀和章节 multi-index。服务决定哪些字段进入关键词/向量索引；请求决定查询权重和重排强度。切分配置、索引配置与请求配置是三个不同因素。详见 [检索配置](../src/serving/README.md)，历史结果见 [实验记录](experiments/README.md)。
 
-题目依据原始 PDF 保存 doc_id、SHA256、物理页码、参考答案和证据，不绑定 PARSED_DOCS、chunk_id 或搜索配置。文字层仅辅助出题和定位，审核以 PDF 为准；表格使用多个 evidence_parts 保留表头、行标签和数值。
+## 评测与应用
 
-审核修订写成新题，题集固定题目 ID；换题建立新题集。检索实验保存逐题 top-k 原始结果，分别统计文档命中、单块证据覆盖和当前配置的单块覆盖上限。证据覆盖目前采用启发式规则，不能等同于语义正确或生成质量；待修问题见 current-state。比较不同解析/切分/检索策略时，保持题集、语料文件版本和评分规则一致。
+题集依据原始 PDF、文件哈希、页码和证据建立，不依赖 chunk_id；固定同一套问题比较不同策略，避免某一种切法定义正确答案。题集构建与检索实验独立，流程和评分边界见 [eval](../eval/README.md)。当前评测是单块证据覆盖，不是生成答案质量，也不代表多块合并后的上下文质量。
 
-## 官方参考
+前端只通过 HTTP 请求后端，不直接连接 Snowflake。后端检索证据后用 AI_COMPLETE 生成带来源编号的回答，并验证引用编号。当前不把历史对话送给模型。SPCS 只公开前端，由 Snowflake 认证；后端使用挂载 OAuth token，以服务所有者角色访问同一语料，尚无用户级文档权限设计。
 
-- [Azure directory table 自动刷新](https://docs.snowflake.com/en/user-guide/data-load-dirtables-auto-azure)
-- [Triggered tasks](https://docs.snowflake.com/en/user-guide/tasks-triggered)
-- [AI_PARSE_DOCUMENT](https://docs.snowflake.com/en/sql-reference/functions/ai_parse_document)
-- [Recursive 切分](https://docs.snowflake.com/en/sql-reference/functions/split_text_recursive_character-snowflake-cortex)
-- [COUNT_TOKENS](https://docs.snowflake.com/en/sql-reference/functions/count_tokens-snowflake-cortex)
-- [递归 CTE](https://docs.snowflake.com/en/sql-reference/constructs/with)
-- [Cortex Search](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-overview)
-
-
-## Markdown 表格策略
-
-新策略位于 `src/sql/ingest/chunk/markdown_header_table/`：逐页去空行和行尾空白，整篇拼接并记录页码偏移；结构 UDTF 提取 TEXT/TABLE；正文使用 Snowflake Markdown header splitter，表格按行组与 token 预算分组并重复表名、多层表头和组标签。计数使用与基线相同的 COUNT_TOKENS；最终硬上限由新算法过程检查，异常交给 CHUNK_DOC 回滚。
-
-新算法过程、固定快照回填与独立服务已验收，配置 `markdown_header_table_1200_200` 保持 inactive，不参与日常入库。少数完整表头加单行仍超限的候选块递归补切，此时不保证重复完整表头；后代保留母块页码范围与章节。第一道门槛和用户确认的限制见 `docs/experiments/markdown-table-gate.md`，最终回填与服务验收见 current-state。
+`src/ingestion/` 放入库，`src/serving/` 放搜索和应用，`eval/` 放评测；Python 包名保持 medical_rag。基础设施、部署、工具与测试独立。部署方式见 [deployment](deployment.md)，运行约束与排错见 [pitfalls](pitfalls.md)。

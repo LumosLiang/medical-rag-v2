@@ -19,10 +19,13 @@ api = [
 ui = ["streamlit>=1.45,<2", "httpx>=0.28,<1"]
 dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
 
+[tool.setuptools]
+package-dir = {"" = "src/serving"}
+
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src/serving"]
 include = ["medical_rag*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests/unit"]
-pythonpath = ["src"]
+pythonpath = ["src/serving"]
