@@ -15,7 +15,7 @@ jobs:
       - name: 扫描不该进仓库的内容
         env:
           EXTRA_FORBIDDEN_PATTERNS: ${{ secrets.EXTRA_FORBIDDEN_PATTERNS }}
-        run: bash scripts/check_forbidden.sh
+        run: bash .github/scripts/check_forbidden.sh
 
   terraform:
     runs-on: ubuntu-latest

@@ -1,12 +1,11 @@
 # 核心实现位置
 
-入库代码已完成，教学占位已移除。应用中的 `你来写 / 到这里` 标记保留，按下列顺序推进：
+入库代码已完成。后端检索、生成和两个路由已实现；本地模拟验收通过，真实 Snowflake 与云端 OAuth 检索、回答已验收。
 
-1. `src/serving/medical_rag/backend/snowflake_access.py` 的 `search`：连接 Snowflake、调用 Cortex Search Python API、将结果转换为 `Source` 列表。
-2. `src/serving/medical_rag/backend/api.py` 的 `/search`：接收请求、调用检索、返回 `SearchResponse`。
-3. `src/serving/medical_rag/frontend/app.py` 的 `send_query`：通过 HTTP 请求后端；`save_result / load_result` 使用 `st.session_state` 保存和读取当前结果。
-4. `api.py` 的 `/ask`：调用已有 `rag.py` 回答流程，返回回答与引用。
+1. `services/retrieval.py`：检查问题、top_k、筛选与 SDK 结果如何映射到 Source。
+2. `api.py`：`/search` 返回片段；`/ask` 直接组织证据、生成回答、校验引用。
+3. `frontend/context_management.py`：已实现会话历史（20 轮）、最近文本窗口（5 轮）及清空；app.py 已接入保存和展示。SPCS 已部署，下一步由用户试用公开界面。
 
-先完成检索，再启用生成回答。当前只保存本次结果，不把历史对话传给模型。代码注释保留学习所需的语法解释，未实现部分可启动，调用时提示未实现。
+当前不把历史对话传给模型。代码优先使用明确命名、中间变量和逐步循环，保留学习所需的语法解释。结构化逐结论引用作为后续改进，暂不实现。
 
-运行方式见 `docs/deployment.md`；实际验收见 `current-state.md`。切分和检索的手工 SQL 位于 `tests/sql/checks/`(验收)和 `scripts/sql/`(回填、跑实验)。
+运行方式见 `docs/deployment.md`；实际验收见 `current-state.md`。切分与搜索验收位于 `tests/snowflake/`，检索实验入口为 `eval/retrieval/run_experiment.sql`。

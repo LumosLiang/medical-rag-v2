@@ -1,44 +1,58 @@
-# 评测：题集与实验分离
+# 评测
 
-评测题绑定原始 PDF、文件 SHA256、物理页码、参考答案和证据，避免某一种切分方式定义“正确答案”。同一套冻结问题可以公平比较不同解析、切分及检索方案，不绑定 chunk_id。
+评测以原始 PDF 为依据，比较不同切分与检索方案能否找回完整证据。问题不绑定 chunk_id，也不以某次解析结果定义正确答案。评测工具独立部署，不参与日常入库或在线问答。
 
 ```text
-原始 PDF → 固定语料快照 → 模型起草 → 人工对照 PDF 审核 → 冻结题集
-                                                       ↓
-块与搜索服务 + 查询权重 → 检索实验 → 原始 top-k → 覆盖评分 → 指标
+题集构建：PDF → 固定快照 → 模型草稿 → PDF 人工审核 → 冻结题集
+检索实验：题集 + 搜索服务 + 请求参数 → 原始 top-k → 评分 → 指标
 ```
 
-## 题集构建：dataset/
+## 代码职责
 
-| 文件 | 职责 |
+`schema.sql` 集中定义全部评测表；`deploy.sql` 按依赖建立表、函数、过程和指标视图，不生成题目或启动实验。
+
+| 模块 | 作用 |
 |---|---|
-| `tables.sql` | 文档快照、PDF 文字层、问题及证据的存储结构 |
-| `snapshot.sql` | 文件哈希与每页文字层；证据定位的辅助函数 |
-| `draft_questions.sql` | AI_COMPLETE 起草 DRAFT，不代替人工审核 |
-| `review_questions.sql` | 应用审核决定；修订生成新题，保留旧题 |
-| `question_sets.sql` | 冻结已批准问题的 ID，作为实验的固定输入 |
+| `dataset/snapshot.sql` | 记录 PDF 哈希与逐页文字层，辅助证据定位 |
+| `dataset/draft_questions.sql` | AI_COMPLETE 起草 DRAFT 问题 |
+| `dataset/review_questions.sql` | 应用审核决定；修订生成新题 |
+| `dataset/question_sets.sql` | 将批准问题的 ID 冻结为固定题集 |
+| `retrieval/run_experiment.sql` | 逐题调用搜索服务，保存原始结果及参数 |
+| `retrieval/score_evidence.sql` | 判断单块证据覆盖，支持不重检索的重新评分 |
+| `retrieval/metrics.sql` | 从完成实验的全部问题计算指标 |
+| `tests/` | 指标分母与完成状态的本地回归 |
 
-文字层使用 pypdf，独立于 AI_PARSE_DOCUMENT。它可能抽错数学符号或表格文字，因此最终答案和证据必须核对 PDF。`evidence_in_pdf` 只是文字层定位结果，不是答案正确的证明。评测页码从 1 开始，解析与 chunk 页码从 0 开始。
+语料、问题和题集分别保存，避免文件版本、审核状态与实验结果互相覆盖。`REVIEW_IMPORT` 是审核输入，`EXPERIMENTS` 是实验元数据，`RETRIEVAL_RESULTS` 是原始返回，`COVERAGE_CEILING` 是单块覆盖的派生结果。这些表服务于不同阶段，保留它们以支持复核。
 
-## 检索实验：retrieval/
+## 使用
 
-| 文件 | 职责 |
-|---|---|
-| `tables.sql` | 实验参数、返回的块、单块证据覆盖上限 |
-| `run_experiment.sql` | 对冻结题集逐题检索，保存 top-k 和 scoring_config |
-| `score_evidence.sql` | 覆盖判定与重新评分；不重新调用检索 |
-| `metrics.sql` | 文档/证据 Hit@k、MRR、覆盖上限与延迟 |
+先按 [部署说明](../docs/deployment.md#评测工具) 建立评测对象，再使用现有冻结题集运行实验。每次使用新的实验 ID，明确指定服务、切分配置和请求权重。例如原生默认权重：
 
-六参数 RUN_RETRIEVAL_EVAL 使用原生默认权重；七参数入口允许传 scoring_config。两者共用检索循环。调用模板在 `scripts/sql/run_experiment.sql`，参数必须明确指定题集、搜索服务与其切分配置。
+```sql
+CALL MEDRAG.EVAL.RUN_RETRIEVAL_EVAL(
+  '<new_experiment_id>', 'qset_v1',
+  'MEDRAG.CORE.MEDICAL_CHUNKS_MARKDOWN_MULTI_INDEX_1200_200',
+  'markdown_header_table_1200_200', 10, '<experiment_note>',
+  OBJECT_CONSTRUCT()
+);
+SELECT * FROM MEDRAG.EVAL.RETRIEVAL_METRICS
+ WHERE experiment_id = '<new_experiment_id>';
+```
 
-当前覆盖规则 v2 要求一个块覆盖所有 evidence_parts（无片段则使用 evidence_text），词覆盖至少 90% 且数值全部出现。覆盖上限表示当前文件版本的任意一个块能否覆盖这些证据；它帮助区分“证据被解析/切分丢失或切散”与“证据存在但未检索到”。不把多个检索块合在一起算单块命中。
+第七个参数为 `scoring_config`；六参数兼容入口调用同一实现。重新评分使用 `RESCORE_EXPERIMENT`，不会重新调用搜索，但会按当前规则与当前块重算覆盖上限。
 
-指标从已完成实验的全部冻结问题起算，零返回题记为未命中；未完成实验不进入最终指标。这个分母修复尚待云端部署，已保存的原始结果和历史评分规则未改。
+## 指标与限制
 
-## 可复现性与边界
+- **证据 Hit@k**：前 k 个结果中，是否至少有一个块完整覆盖该题证据，再对问题取平均。
+- **证据 MRR**：首个覆盖块的排名倒数取平均，未命中记 0，排名范围受实验 top-k 限制。
+- **单块覆盖上限**：当前配置的所有文档块中，是否存在一个块覆盖完整证据。
 
-语料快照、冻结题集、配置名、评分版本和查询参数构成一次实验的比较条件。修题建立新题和新题集，改变切分参数建立新配置，不能直接改旧实验所依赖的输入。
+完成实验的零返回题仍进入分母，未完成实验排除；指标边界已在 Snowflake 合成输入中验证。这些指标不是标准 chunk Recall@k，也不是答案质量评分。
 
-v2 是词袋覆盖，不理解比较符号、组别与数值的对应关系，也不判断生成答案质量。原始检索结果尚未保存 etag；重算覆盖上限仍读取实时 CHUNKS，回填后不能把变化当成原实验的效果。PARSED_DOCS 目前按文件版本复用，完整解析策略 A/B 尚需独立解析版本设计。
+评分 v2 要求所有 evidence_parts 位于同一个块内；没有片段时使用 evidence_text。每个片段至少覆盖 90% 的词，数值全部出现。规则是词袋启发式，不能判断比较符号、组别与数值对应关系或结论是否受支持。
 
-目前 qset_v1 有 50 道批准题，语料快照有 209 篇；两题证据表名仍待修订。调权重使用同一批 50 题，属于探索，需要独立问题验证。历史结果见 [实验记录](../docs/experiments/README.md)，不将这些数值称为生成质量或普遍最佳参数。
+PDF 文字层可能抽错符号或表格，因此人工审核以 PDF 为准。评测页码从 1 开始，解析及块页码从 0 开始。冻结后修题建立新题及新题集，不覆盖历史依据。
+
+当前快照 `corpus_2026_10_03` 有 209 篇，`qset_v1` 有 50 道批准题，其中两题证据表名待修订。该题集已用于调参，结果属于探索。检索结果尚未保存 etag，重新评分的上限读取实时 CHUNKS；比较前须确认同一文件版本、服务刷新完成与配置覆盖范围。解析缓存仅按文件版本复用，解析策略 A/B 尚需版本隔离。
+
+历史结果集中在 [实验报告](../docs/experiments/README.md)。

@@ -1,31 +1,24 @@
 # 项目地图
 
-| 位置 | 用途 |
+| 位置 | 职责 |
 |---|---|
-| `infra/azure/` | 存储、队列、Event Grid、角色分配；真实参数和状态不进仓库 |
-| `infra/snowflake/setup/00`–`03` | 一次性建立角色、库、集成、schema、Git 仓库对象 |
-| `deploy.sql` | 从 Git 仓库部署入库、搜索和评测模块，写 OPS.DEPLOY_LOG |
-| `src/ingestion/sql/10` | CORE.PIPELINE_CONFIG |
-| `src/ingestion/sql/20` | INGEST.CORPUS_STAGE、CORPUS_STREAM |
-| `src/ingestion/sql/30`–`50` | 捕获、判断变更、删旧块；INGEST.FILE_CHANGES |
-| `src/ingestion/sql/60` | INGEST.PARSE_FILE、PARSED_DOCS |
-| `src/ingestion/sql/80` | INGEST.RUN_INGEST |
-| `src/ingestion/sql/90` | INGEST.INGEST_TASK，新增、覆盖和删除自动触发已验收（2026-10-03） |
-| `src/ingestion/sql/chunk/` | CORE.CHUNK_DOC 分派与事务、CHUNKS、各切分算法 |
-| `src/ingestion/sql/chunk/structured_markdown/` | 章节+表格策略，按规范化、结构、分组、定位、算法入口拆分 |
-| `src/serving/sql/` | 基础搜索服务与同一批块的标题前缀、multi-index 实验服务；只改检索输入，不改切分配置 |
-| `eval/dataset/` | PDF 快照、草稿题、审核修订与冻结题集 |
-| `eval/retrieval/` | 实验存储、六/七参数检索入口、覆盖评分与指标视图 |
-| `tests/sql/checks/` | 手工验收，只读或只写单篇：单篇切分、块验收、markdown 定位率、搜索服务；不进部署入口 |
-| `scripts/sql/` | 手工操作模板：固定快照回填、跑一次检索实验；改开头的 SET 即可复用 |
-| `tests/unit/` | 本地 pytest：应用骨架、markdown_header_table 的 Python handler |
-| `src/serving/medical_rag/backend/`、`src/serving/medical_rag/frontend/` | FastAPI、Streamlit 骨架；核心链路由用户填写 |
-| `compose.yaml`、`deploy/spcs/` | 本机 Docker、SPCS 部署文件；独立于入库部署 |
-| `docs/experiments/` | 每次实验的设置、结果和结论；实验数字只写在这里 |
-| `scripts/` | 本机语料工具与操作模板（被忽略）；已跟踪的 check_forbidden.sh 供 CI 使用，用法见 docs/deployment.md |
-| `data/` | 本地 PDF 与来源清单；历史人工审核记录在 data/eval/archive/，全部忽略 |
-| `.harness/local/` | 本地连接与检查结果、archive/spike/ 早期实验、learning/ 学习示例，全部忽略 |
+| infra/azure/ | ADLS、Queue、Event Grid 与 Azure 权限 |
+| infra/snowflake/setup/ | 角色、数据库、集成、schema、Git repository 与 SPCS 资源初始化 |
+| deploy.sql | 21 个入库与检索模块的 Git 发布入口 |
+| deploy/docker/ | 镜像构建与可选本机 Compose |
+| deploy/spcs/ | 容器 spec、服务创建与升级 |
+| src/ingestion/sql/ | 捕获、分类、删除旧版本、解析、调度 |
+| src/ingestion/sql/chunk/ | CHUNKS、统一事务入口、recursive 与结构化 Markdown 策略 |
+| src/serving/cortex_search/ | 四套检索服务定义 |
+| src/serving/medical_rag/ | FastAPI、检索和生成服务、Streamlit 与会话管理 |
+| eval/schema.sql、eval/deploy.sql | 评测表结构与独立发布入口 |
+| eval/dataset/、eval/retrieval/ | 题集构建与检索实验 |
+| tests/ingestion/、tests/serving/、eval/tests/ | 本地回归 |
+| tests/snowflake/ | 临时表单篇切分与只读运行检查 |
+| docs/ | 架构、工程难点、部署与实验结果 |
+| .github/scripts/ | CI 敏感信息检查 |
+| data/、.harness/local/ | 忽略的本机语料、历史工具与运行证据 |
 
-库 MEDRAG，角色 MEDRAG_ADMIN，schema 为 INGEST、CORE、EVAL、OPS。Git 仓库对象为 MEDRAG.OPS.REPO。账户级集成为 MEDRAG_AZURE_STORAGE_INT、MEDRAG_AZURE_QUEUE_INT、MEDRAG_GIT_API_INT。
+数据库 MEDRAG；业务角色 MEDRAG_ADMIN；schema 为 INGEST、CORE、EVAL、OPS。OPS 保留 Git repository、镜像仓库、spec stage 与应用服务。DEPLOY_LOG 历史表不再由入口写入。
 
-warehouse 沿用 MEDICAL_RAG_PARSE_WH（解析）、MEDICAL_RAG_INDEX_WH（部署与服务刷新）。基线 Cortex Search 已部署并验收；应用骨架已准备，核心链路尚未实现；评测题库和检索评测(eval/)已建，生成质量评测未实现。
+仓库中的路径与配置是正式源；运行状态以 current-state.md 为准，数字以 docs/experiments/ 为准。本机忽略文件不是新 clone 的必要依赖。

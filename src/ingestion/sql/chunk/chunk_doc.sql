@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS CORE.CHUNKS (
   chunk_index    NUMBER        NOT NULL COMMENT 'Order within the document, starting at 0',
   section_path   VARCHAR       COMMENT 'Header path, e.g. Results > Survival',
   chunk_text     VARCHAR       NOT NULL COMMENT 'Stored retrieval text; search-service heading prefixes are computed separately',
-  chunk_text_raw VARCHAR       NOT NULL COMMENT 'Chunk content before search-only prefixes; table context may be repeated',
+  chunk_text_raw VARCHAR       NOT NULL COMMENT 'Legacy duplicate of chunk_text; retained for existing table compatibility',
   token_count    NUMBER        NOT NULL COMMENT 'Tokens in chunk_text, measured with COUNT_TOKENS',
   page_start     NUMBER        COMMENT 'Starting at 0; NULL when pages cannot be matched',
   page_end       NUMBER,

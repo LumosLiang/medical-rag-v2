@@ -1,6 +1,6 @@
 # 当前入库规则
 
-设计以 `docs/architecture.md` 为准；当前先跑通，不提前加入重试和复杂状态判断。
+设计以 `docs/architecture.md` 为准；当前入库已验证；重试与自动数据检查尚未实现。
 
 入库实现位于 `src/ingestion/sql/`，搜索服务与应用位于 `src/serving/`；评测独立位于根目录 `eval/`。
 
@@ -15,4 +15,4 @@
 - 各策略的块共用 CORE.CHUNKS，以 config_name 区分；每个检索服务只筛选一个配置，服务名后缀对应该配置名。新策略保持 inactive，固定快照回填和评测；日常 ingest 仍只用基线。
 - stage 先建且 REFRESH_ON_CREATE=FALSE，再建 stream，再 REFRESH；stage 和 task 已部署，运行状态见 current-state。留意 SHOW STREAMS 的 STALE_AFTER，不把默认保留期当成固定保证。
 
-自动数据检查、失败重试、完整前缀和参考文献处理在跑通后做。出处见 architecture 的官方参考，实测限制见 `docs/pitfalls.md`。
+自动数据检查、失败重试和参考文献处理尚未实现。出处见 architecture 的官方参考，主要设计取舍见 `docs/challenges.md`。

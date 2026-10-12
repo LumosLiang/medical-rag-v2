@@ -45,7 +45,7 @@ fi
 status=0
 
 # 已跟踪的文件,加上还没跟踪、也没被忽略的文件,也就是下一次提交会带上的内容。
-matches="$(git ls-files -z -co --exclude-standard -- . ':(exclude)scripts/check_forbidden.sh' \
+matches="$(git ls-files -z -co --exclude-standard -- . ':(exclude).github/scripts/check_forbidden.sh' \
   | while IFS= read -r -d '' file; do
       if [[ -f "$file" ]]; then
         grep -nIiE -f "$patterns_file" -- "$file" || true

@@ -13,23 +13,6 @@
 USE ROLE MEDRAG_ADMIN;
 USE DATABASE MEDRAG;
 
-CREATE TABLE IF NOT EXISTS EVAL.REVIEW_IMPORT (
-  review_batch         VARCHAR       NOT NULL,
-  question_id          VARCHAR       NOT NULL COMMENT 'Draft being reviewed',
-  decision             VARCHAR       NOT NULL COMMENT 'APPROVED, REJECTED or REVISE',
-  note                 VARCHAR,
-  reviewed_by          VARCHAR       NOT NULL COMMENT 'Reviewer and review record',
-  new_question         VARCHAR,
-  new_reference_answer VARCHAR,
-  new_page_number      NUMBER,
-  new_evidence_text    VARCHAR       COMMENT 'As seen in the PDF; may differ from the text layer',
-  new_evidence_parts   ARRAY,
-  new_question_type    VARCHAR,
-  new_tags             ARRAY,
-  loaded_at            TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP()
-)
-COMMENT = 'medrag v2 eval: review decisions waiting to be applied to QUESTIONS by APPLY_REVIEW';
-
 CREATE OR REPLACE PROCEDURE EVAL.APPLY_REVIEW(p_review_batch VARCHAR)
 RETURNS VARCHAR
 LANGUAGE SQL

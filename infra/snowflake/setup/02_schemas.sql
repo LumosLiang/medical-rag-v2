@@ -8,8 +8,8 @@ USE DATABASE MEDRAG;
 CREATE SCHEMA IF NOT EXISTS INGEST
   COMMENT = 'External stage, stream, task, FILE_CHANGES, PARSED_DOCS';
 CREATE SCHEMA IF NOT EXISTS CORE
-  COMMENT = 'PIPELINE_CONFIG, CHUNKS, DOC_METADATA, Cortex Search service';
+  COMMENT = 'PIPELINE_CONFIG, CHUNKS, Cortex Search services';
 CREATE SCHEMA IF NOT EXISTS EVAL
-  COMMENT = 'Labels, eval runs, results, metrics, baselines';
+  COMMENT = 'PDF snapshots, questions, frozen sets, retrieval experiments and metrics';
 CREATE SCHEMA IF NOT EXISTS OPS
-  COMMENT = 'Git repository object, data check results, deploy log';
+  COMMENT = 'Git repository, image repository, specification stage and application service';

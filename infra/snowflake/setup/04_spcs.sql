@@ -1,4 +1,5 @@
--- SPCS 一次性引导，不属于 deploy.sql。包含账户权限变更，执行前须确认。
+-- SPCS 运行资源：单节点计算池、镜像仓库、spec stage 与公开端点权限。
+-- 初始化与应用发布分离，日常升级只更新镜像和服务 spec。
 USE ROLE ACCOUNTADMIN;
 
 CREATE COMPUTE POOL IF NOT EXISTS MEDRAG_APP_POOL

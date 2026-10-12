@@ -2,14 +2,6 @@
 USE ROLE MEDRAG_ADMIN;
 USE DATABASE MEDRAG;
 
-CREATE TABLE IF NOT EXISTS EVAL.QUESTION_SETS (
-  set_name    VARCHAR       NOT NULL,
-  question_id VARCHAR       NOT NULL,
-  frozen_at   TIMESTAMP_LTZ NOT NULL DEFAULT CURRENT_TIMESTAMP(),
-  CONSTRAINT pk_question_sets PRIMARY KEY (set_name, question_id)
-)
-COMMENT = 'medrag v2 eval: frozen question sets; experiments are compared only within one set';
-
 CREATE OR REPLACE PROCEDURE EVAL.FREEZE_QUESTION_SET(p_set_name VARCHAR, p_snapshot_name VARCHAR)
 RETURNS NUMBER
 LANGUAGE SQL

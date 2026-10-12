@@ -27,5 +27,5 @@ where = ["src/serving"]
 include = ["medical_rag*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/unit"]
+testpaths = ["tests", "eval/tests"]
 pythonpath = ["src/serving"]

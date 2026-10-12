@@ -11,7 +11,7 @@
 -- 执行完:两条 DESC 结果里各有一个 AZURE_CONSENT_URL,在浏览器里各打开一次、点 Accept。
 -- 两个 service principal 在 Azure 租户里出现后(可能要一小时以上),再做 infra/azure 的第二阶段。
 --
--- 官方文档里的注意事项(见 docs/pitfalls.md):
+-- 集成的访问边界:
 --   - 不要对这两个集成 CREATE OR REPLACE,会让引用它们的 stage 失效;要改就用 ALTER。
 --   - 存储集成和通知集成在 Azure 里是两个不同的 service principal。
 --   - 一个队列只能给一个通知集成。

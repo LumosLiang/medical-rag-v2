@@ -7,4 +7,4 @@
 
 以下是 2026-10-04 已完成实验的结果。2026-10-06 修正了代码中的章节归属及指标分母，并完成 CLI 部署与五组检索复验；正式块未回填，不能把原块成绩说成修复后全库回填的成绩。基线完全复现，其余组有原生检索排名波动，前后数值与诊断见检索对照的“重构部署复验”。两题证据表名和词袋评分限制保留；同批 50 题上的权重选择属于探索。
 
-新实验使用 scripts/sql/run_experiment.sql，选择固定题集、服务、切分配置和明确的 scoring_config；用新 experiment_id 保存，不覆盖历史记录。实现见 [eval](../../eval/README.md)，索引与请求配置见 [serving](../../src/serving/README.md)。
+新实验显式指定固定题集、服务、切分配置和 scoring_config；使用新的 experiment_id，不覆盖历史记录。实现见 [eval](../../eval/README.md)，索引与请求配置见 [serving](../../src/serving/README.md)。

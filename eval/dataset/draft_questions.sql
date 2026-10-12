@@ -43,7 +43,7 @@ BEGIN
        AND NOT EXISTS (SELECT 1 FROM EVAL.QUESTIONS q
                         WHERE q.snapshot_name = :p_snapshot_name AND q.doc_id = f.doc_id);
 
-  -- 2. 每篇调一次模型。结果先落进临时表:放在 CTE 里会被重复调用、重复计费(docs/pitfalls.md)。
+  -- 2. 每篇调一次模型。结果先落进临时表:放在 CTE 里会被重复调用、重复计费。
   CREATE OR REPLACE TEMPORARY TABLE EVAL.DRAFT_RAW AS
     SELECT d.doc_id, d.sha256, d.page_count, d.question_type,
            AI_COMPLETE(

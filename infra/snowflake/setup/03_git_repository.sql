@@ -3,7 +3,7 @@
 --   EXECUTE IMMEDIATE FROM @MEDRAG.OPS.REPO/branches/main/<仓库里的路径>
 -- 私有仓库,用只读 token 认证(官方建议自动化场景用 token,不用 OAuth)。
 --
--- 分三段,顺序不能乱:
+-- 分别建立凭据、API 集成和仓库对象:
 --
 -- 第 1 段:用户自己做,token 不经过别人。
 --   1. GitHub 上建 fine-grained token:只选这一个仓库,Repository permissions 里 Contents 设为 Read-only。
@@ -19,7 +19,7 @@
 --   snow sql -f infra/snowflake/setup/03_git_repository.sql --enable-templating JINJA -D repo_url="$(git remote get-url origin)"
 --
 -- token 到期后:在 GitHub 上重新生成,再 ALTER SECRET MEDRAG.OPS.GITHUB_READONLY SET PASSWORD = '<新 token>'。
--- 报错排查见 docs/pitfalls.md 的"Git 仓库对象"一节。
+-- 发布方式见 docs/deployment.md。
 
 -- 第 2 段:账户级的 API 集成,只放行这一个仓库、只认上面那个 secret。
 USE ROLE ACCOUNTADMIN;

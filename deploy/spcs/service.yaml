@@ -1,18 +1,20 @@
 spec:
   containers:
     - name: backend
-      image: /medrag/ops/app_images/backend:v1
+      mountSessionToken: true
+      image: /medrag/ops/app_images/backend:20261012
       env:
         SNOWFLAKE_DATABASE: MEDRAG
         SNOWFLAKE_SCHEMA: CORE
         SNOWFLAKE_WAREHOUSE: MEDICAL_RAG_INDEX_WH
-        RAG_CONFIG_NAME: recursive_once_1200_200
-        RAG_MODEL: llama3.3-70b
+        RAG_CONFIG_NAME: markdown_header_table_1200_200
+        RAG_SEARCH_SERVICE: MEDICAL_CHUNKS_MARKDOWN_MULTI_INDEX_1200_200
+        RAG_MODEL: claude-opus-5
       readinessProbe:
         port: 8000
         path: /healthz
     - name: frontend
-      image: /medrag/ops/app_images/frontend:v1
+      image: /medrag/ops/app_images/frontend:20261012
       mountSessionToken: false
       env:
         BACKEND_URL: http://localhost:8000
@@ -24,6 +26,6 @@ spec:
       port: 8501
       public: true
 serviceRoles:
-  - name: ui-access
+  - name: ui_access
     endpoints:
       - ui

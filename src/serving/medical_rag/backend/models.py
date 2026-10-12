@@ -18,6 +18,7 @@ class QueryRequest(BaseModel):
 
 class Source(BaseModel):
     citation_id: int
+    # 数据库块的标识，用于追溯来源；不是本次回答中的 [1] 编号。
     chunk_id: str
     relative_path: str
     page_start: int | None = None

@@ -55,7 +55,7 @@ resource "azurerm_role_assignment" "snowflake_blob_reader" {
 }
 
 # 官方写的最小角色 Storage Queue Data Message Processor 实测不够,建带自动刷新的 stage 时报 403;
-# 改用官方列出的另一个角色,范围仍然只有这一个队列(docs/pitfalls.md)。
+# 改用官方列出的另一个角色,范围仍然只有这一个队列。
 resource "azurerm_role_assignment" "snowflake_queue_contributor" {
   count = var.snowflake_queue_sp_object_id == null ? 0 : 1
 

@@ -13,7 +13,7 @@ SELECT COUNT(DISTINCT relative_path) AS files,
        COUNT(*) AS chunks,
        MAX(token_count) AS max_tokens,
        COUNT_IF(token_count IS NULL OR token_count > 512) AS invalid_tokens,
-       COUNT_IF(NULLIF(TRIM(chunk_text_raw), '') IS NULL) AS empty_chunks,
+       COUNT_IF(NULLIF(TRIM(chunk_text), '') IS NULL) AS empty_chunks,
        COUNT_IF(page_start IS NULL OR page_end IS NULL OR page_start > page_end) AS invalid_pages,
        COUNT_IF(page_start < page_end) AS across_pages,
        COUNT(*) - COUNT(DISTINCT chunk_id) AS duplicate_ids
