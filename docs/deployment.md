@@ -4,7 +4,19 @@
 
 ## 初始化
 
-Azure 资源由 `infra/azure/` 管理。Snowflake 的角色、数据库、集成、schema、Git repository 和 SPCS 资源统一位于 [infra/snowflake/setup/](../infra/snowflake/setup/README.md)。初始化涉及账户权限；日常对象发布不重复初始化。
+Azure 资源由 `infra/azure/` 管理。Snowflake 的角色、数据库、集成、schema、Git repository 和 SPCS 资源统一位于 [infra/snowflake/setup/](../infra/snowflake/setup/)。初始化涉及账户权限；日常对象发布不重复初始化。
+
+| 文件 | 初始化对象 | 执行角色 |
+|---|---|---|
+| `00_role_and_database.sql` | 项目角色、数据库、warehouse 使用权限与 Cortex 权限 | ACCOUNTADMIN |
+| `01_azure_integrations.sql` | Azure storage / notification integrations | ACCOUNTADMIN |
+| `02_schemas.sql` | INGEST、CORE、EVAL、OPS | MEDRAG_ADMIN |
+| `03_git_repository.sql` | Git API integration 与 repository | 按文件切换角色 |
+| `04_spcs.sql` | 计算池、镜像仓库、spec stage 与端点权限 | 按文件切换角色 |
+
+Azure 集成的 tenant、stage 和 queue 地址来自 Terraform 输出；Git repository 地址执行时传入。私有仓库 secret 由用户在 Snowflake 中创建，内容不经过仓库。完成 Azure consent 后，再授予两个 service principal 对应的文件及队列权限。
+
+角色与库先于集成和 schema，schema 与 Git secret 先于 repository；SPCS 资源在首次容器发布前准备。当前账户已完成初始化，不因目录整理重新执行授权或转移所有权。
 
 ## 入库与检索 SQL
 
@@ -17,7 +29,7 @@ EXECUTE IMMEDIATE FROM @MEDRAG.OPS.REPO/branches/main/deploy.sql
   USING (stage_base_url => '<stage_base_url>');
 ```
 
-`stage_base_url` 由 `terraform -chdir=infra/azure output -raw stage_base_url` 获取。入口部署 21 个入库及搜索模块，不执行回填、评测、任务恢复或容器发布。需要固定发布版本时，将路径中的 `branches/main` 换为 `commits/<commit_sha>`。
+`stage_base_url` 由 `terraform -chdir=infra/azure output -raw stage_base_url` 获取。入口按依赖部署入库及搜索模块，不执行回填、评测、任务恢复或容器发布。需要固定发布版本时，将路径中的 `branches/main` 换为 `commits/<commit_sha>`。
 
 这是 [Snowflake 官方支持的 Git 执行流程](https://docs.snowflake.com/en/developer-guide/git/git-examples)，而非 Git FETCH 自动应用代码。`deploy.sql` 是按依赖组织 SQL 的薄入口，不是迁移框架；发布记录使用 Git 版本与执行结果，不依赖自建部署日志表。已有 `OPS.DEPLOY_LOG` 仅保留历史数据，不再写入。OPS schema 仍承载 Git repository、镜像仓库、spec stage 和服务。
 
@@ -74,7 +86,26 @@ SNOWFLAKE_CONNECTION_NAME='<connection_name>' .venv/bin/uvicorn medical_rag.back
 .venv/bin/streamlit run src/serving/medical_rag/frontend/app.py
 ```
 
-Python 直接启动不会自动加载 `.env`。单元测试与手工验收见 [tests](../tests/README.md)。`data/` 保留本机语料，操作与历史工具记录归档于 `.harness/local/`，不作为新 clone 的运行依赖。CI 敏感信息检查位于 `.github/scripts/check_forbidden.sh`。
+Python 直接启动不会自动加载 `.env`。`data/` 保留本机语料，操作与历史工具记录归档于 `.harness/local/`，不作为新 clone 的运行依赖。CI 敏感信息检查位于 `.github/scripts/check_forbidden.sh`。
+
+## 测试与验收
+
+本地测试验证代码行为，Snowflake SQL 验证实际数据与服务状态。检索质量对照位于独立的 [eval](../eval/README.md)，不混入单元测试。
+
+| 位置 | 验证内容 |
+|---|---|
+| `tests/ingestion/` | 表格边界、重复上下文、章节继承及位置标注的回归 |
+| `tests/serving/` | API 输入、检索映射、生成结果与引用错误处理 |
+| `eval/tests/` | 完成状态与零返回题的指标分母 |
+| `tests/snowflake/` | 单篇切分、全库块校验、定位统计与搜索服务检查 |
+
+```sh
+.venv/bin/python -m pytest
+```
+
+pytest 不连接 Azure 或 Snowflake。嵌入 Python handler 的检查不代替 Snowflake 原生函数运行验收；SQLite 指标测试只验证基础查询，不验证 Snowflake 的完整视图语法。
+
+`chunk_one_file.sql` 将结果写入会话临时表，便于逐块查看，不替换生产 CHUNKS。其他 SQL 为只读检查，执行前选择配置与快照。基线允许超过 512 token；限窗策略要求没有超限块。单篇检查看页码、章节、完整原文及重复调用结果；全库检查看文件版本、缺文档、空块、重复 ID 和 token 分布。
 
 ## 官方参考
 

@@ -1,21 +1,23 @@
 # 检索与回答服务
 
-Cortex Search 从 CHUNKS 构建索引，FastAPI 负责接收问题、检索和回答，Streamlit 展示问题、答案与引用。应用包名为 medical_rag。后端 /search、/ask、检索和生成已实现。旧版行内引用已在云端容器 OAuth 身份下验收；逐结论摘录版通过本地测试与 10 道固定题真实调用，额外无答案问题返回受控生成错误，已部署到 SPCS；同镜像云端 OAuth 验证任务通过检索与引用回答。无答案问题的生成错误仍是已知边界。
+Cortex Search 构建检索索引，FastAPI 串起检索和生成，Streamlit 展示答案及引用。实现位于 [src/serving/](../src/serving/)，搜索定义在 cortex_search/，应用在 medical_rag/；发布步骤见 [部署](deployment.md)，运行验收见 [current-state](../.harness/context/current-state.md)。
 
-服务定义位于 `cortex_search/`，Python 应用位于 `medical_rag/`。
+## 搜索服务
 
-## 四个搜索服务的区别
-
-所有服务都用 snowflake-arctic-embed-l-v2.0、chunk_id 主键及 1 小时 TARGET_LAG；同批章节表格块上的三个服务只改变检索输入，不改变原始块。
+原有四个服务使用 snowflake-arctic-embed-l-v2.0；新增两个 8K 实验服务使用 snowflake-arctic-embed-l-v2.0-8k。所有服务使用 chunk_id 主键及 1 小时 TARGET_LAG。
 
 | SQL | 切分配置 | 关键词输入 | 向量输入 |
 |---|---|---|---|
-| `10_recursive_baseline.sql` | recursive_once_1200_200 | chunk_text | chunk_text |
-| `20_section_body.sql` | markdown_header_table_1200_200 | chunk_text | chunk_text |
-| `30_heading_prefix.sql` | 同上 | 最近标题 + 正文 | 最近标题 + 正文 |
-| `40_section_multi_index.sql` | 同上 | chunk_text、完整 section_path 两个索引 | 仅 chunk_text |
+| `recursive.sql` | recursive_once_1200_200 | chunk_text | chunk_text |
+| `structured_markdown/body.sql` | markdown_header_table_1200_200 | chunk_text | chunk_text |
+| `structured_markdown/heading_prefix.sql` | 同上 | 最近标题 + 正文 | 最近标题 + 正文 |
+| `structured_markdown/multi_index.sql` | 同上 | chunk_text、完整 section_path 两个索引 | 仅 chunk_text |
+| `structured_markdown/arctic_8k_control.sql` | markdown_header_table_1200_200 | chunk_text、完整 section_path | chunk_text，8K 模型 |
+| `structured_markdown/arctic_8k_large.sql` | structured_markdown_8k_body_1024 | chunk_text、完整 section_path | chunk_text，8K 模型 |
 
 单 ON 字段的服务也是混合检索，包含关键词、向量及原生重排。ATTRIBUTES 是筛选字段，不会仅因列在 SELECT 中就参与关键词搜索。前缀服务在源查询构造 search_text，原始 chunk_text 保留用于展示和评分；代价是标题占用 embedding 窗口。Multi-index 让章节单独提供关键词信号，不为章节增加向量。
+
+8K CONTROL 只换模型；BODY_1024 同时扩大正文、保留完整摘要/表格并清理明确噪声。实验请求沿用最佳权重，实验不会自动切换应用。切分定义见 [长窗口配置](chunking.md)。
 
 实际服务名保留现有标识，写在各 SQL 中。应用默认选择当前历史实验表现最好的 multi-index 服务，并发送下方最佳请求权重；日常入库使用 recursive 基线，因此新增文档不会自动进入应用当前选择的 Markdown 索引。两者暂不切换；应用配置改变也不触发历史文档重切。
 
@@ -37,7 +39,7 @@ SQL 定义索引字段、源配置、模型与刷新目标。此前调参改变�
 }
 ```
 
-这是相对权重，不是百分比；整体关键词权重与其内部字段权重属于两层。该请求已成为应用配置默认，检索时已传给 service.search；实际实验参数保存在 EXPERIMENTS.params。默认和调参结果见 [实验记录](../../docs/experiments/README.md)。
+这是相对权重，不是百分比；整体关键词权重与其内部字段权重属于两层。该请求已成为应用配置默认，检索时已传给 service.search；实际实验参数保存在 EXPERIMENTS.params。默认和调参结果见 [实验记录](experiments/README.md)。
 
 [官方查询与评分参数](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-search/cortex-search-customize-scoring)。
 
@@ -47,16 +49,18 @@ SQL 定义索引字段、源配置、模型与刷新目标。此前调参改变�
 - `connection.py`：建立和关闭 Snowflake 连接，处理本地/SPCS 凭据。
 - `services/retrieval.py`：调用 Cortex Search，返回带文件、页码和原文的 Source。
 - `services/generation.py`：调用 AI_COMPLETE，读取结构化回答。
-- `api.py`：HTTP 请求和响应；`/search` 只检索，`/ask` 直接串起检索、证据提示词、生成与引用校验，不增加独立业务层；检索和生成对象通过 FastAPI Depends 注入。
+- `api.py`：HTTP 路由，/ask 保留检索、提示、生成、校验与响应的完整调用顺序；检索和生成对象通过 FastAPI Depends 注入。
+- `prompts.py`：回答约束及证据提示词构造。
+- `citations.py`：逐结论引用校验、编号去重与答案文本拼接；全部校验通过后标记被引用来源。
 
 回答按 `claims` 返回，每条结论包含 `citations`：来源编号 `source_id` 与必要的原文摘录 `quote`。后端逐条检查引用不为空、编号属于本次检索、摘录在对应片段中存在；仅合并空白差异，不删除标点或改变数字。通过后由后端生成 [1] 等标记及供展示、会话使用的 answer，前端在来源卡片中展示对应结论、引用原句与完整片段。文件、页码和 chunk_id 始终来自检索，不由模型生成。
 
 `insufficient_evidence` 仍是模型判断，不允许绕过事实结论的校验。有支持的部分结论可保留，并追加固定的证据不足提示；完全没有支持的结论返回空 claims 与固定提示。非法引用或摘录返回 502，前端显示错误而不保存未经校验的答案；当前不自动重试。
 
-摘录存在只证明文本来自检索片段，不证明其支持结论；解析本身也可能与 PDF 不一致。提示词要求保留研究条件、人群、不确定性与矛盾结果，不将相关性表述成因果或将单篇发现推广成治疗建议。引用页码是来源块的范围，不是摘录精确所在页。尚无独立语义核验或可点击 PDF 链接。工程取舍见 [工程难点](../../docs/challenges.md#带引用的回答与校验边界)。
+摘录存在只证明文本来自检索片段，不证明其支持结论；解析本身也可能与 PDF 不一致。提示词要求保留研究条件、人群、不确定性与矛盾结果，不将相关性表述成因果或将单篇发现推广成治疗建议。引用页码是来源块的范围，不是摘录精确所在页。尚无独立语义核验或可点击 PDF 链接。工程取舍见 [工程难点](challenges.md#带引用的回答与校验边界)。
 
 默认生成模型为 `claude-opus-5`，属于 Snowflake 当前支持的新一代模型，不宣称它是所有厂商中最新或本项目效果最佳的模型；本账户与云端 OAuth 身份下已成功调用；生成质量尚未做正式评测。[官方模型与函数说明](https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql-regional-availability)。配置可通过 RAG_MODEL、RAG_SEARCH_SERVICE、RAG_CONFIG_NAME 与 RAG_SCORING_CONFIG 覆盖；更换服务时同时核对来源配置与字段权重。
 
 ## 前端会话
 
-`frontend/context_management.py` 管理当前 session_state：最多保存 20 轮问答及其来源，app.py 按轮展示并提供清空按钮。`get_recent_messages()` 取最近 5 轮的问答文本，预留给后续问题改写；当前请求仍只传本次问题，尚不能解析跨轮指代。仅检索的结果不进入问答历史。没有永久存储、摘要压缩或 token 预算控制。
+`frontend/app.py` 负责页面交互和 HTTP 请求，`frontend/views.py` 渲染答案与来源卡片。`frontend/context_management.py` 管理当前 session_state：最多保存 20 轮问答及其来源，app.py 按轮展示并提供清空按钮。`get_recent_messages()` 取最近 5 轮的问答文本，预留给后续问题改写；当前请求仍只传本次问题，尚不能解析跨轮指代。仅检索的结果不进入问答历史。没有永久存储、摘要压缩或 token 预算控制。

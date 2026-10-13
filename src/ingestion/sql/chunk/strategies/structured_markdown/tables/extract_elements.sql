@@ -66,6 +66,27 @@ def make_table(lines, offsets, first, last, caption):
             'caption': caption}
 
 
+
+def table_end(lines, first):
+    last = first + 2
+    while last < len(lines) and pipe_row(lines[last]):
+        # 空行被规范化去掉后，仍靠新的表头 + 分隔行识别相邻表格。
+        if table_start(lines, last):
+            break
+        last += 1
+    return last
+
+
+def find_caption(lines, offsets, first, cursor):
+    caption_index = first - 1
+    # 只跨过明确的缩写说明，不跨越普通正文去猜表名。
+    while caption_index >= 0 and re.match(r'^[A-Z][A-Za-z0-9 /_-]{0,15},', lines[caption_index]):
+        caption_index -= 1
+    has_caption = (caption_index >= 0 and offsets[caption_index] >= cursor
+                   and CAPTION.match(lines[caption_index]))
+    return caption_index, has_caption
+
+
 class SplitTableSpans:
     def process(self, document_text):
         text = document_text or ''
@@ -81,20 +102,8 @@ class SplitTableSpans:
                 index += 1
                 continue
             first = index
-            last = first + 2
-            while last < len(lines) and pipe_row(lines[last]):
-                # 两张表之间的空行可能已被规范化删掉；新表头+分隔行仍可划清边界。
-                if table_start(lines, last):
-                    break
-                last += 1
-            # 只关联紧邻当前表格的前置表名，不能拿正文中提到的 Table N 猜关联。
-            caption_index = first - 1
-            # 表名与表头之间可能有缩写说明，例如 'CI, confidence interval; ICC, ...'。
-            # 只跨过这种说明行；不跨越一般正文去猜表名归属。
-            while caption_index >= 0 and re.match(r'^[A-Z][A-Za-z0-9 /_-]{0,15},', lines[caption_index]):
-                caption_index -= 1
-            has_caption = (caption_index >= 0 and offsets[caption_index] >= cursor
-                           and CAPTION.match(lines[caption_index]))
+            last = table_end(lines, first)
+            caption_index, has_caption = find_caption(lines, offsets, first, cursor)
             start = offsets[caption_index if has_caption else first]
             end = offsets[last - 1] + len(lines[last - 1])
             if start > cursor and text[cursor:start].strip():

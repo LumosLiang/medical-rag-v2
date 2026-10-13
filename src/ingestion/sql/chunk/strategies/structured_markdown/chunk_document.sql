@@ -29,6 +29,8 @@ DECLARE
   v_headers    OBJECT;
   v_candidates ARRAY;
   v_over_limit INTEGER;
+  v_options    OBJECT;
+  v_body_target_tokens INTEGER;
   -- 450 是表格分组的软目标，留出余量；不是字符长度，也不是最终硬上限。
   v_table_target_tokens INTEGER DEFAULT 450;
   over_limit EXCEPTION (-20116, 'CHUNK_STRUCTURED_MARKDOWN: NULL token count or a chunk exceeds max_tokens');
@@ -40,16 +42,32 @@ BEGIN
      AND etag = :p_etag
      AND error_message IS NULL;
 
-  SELECT split_headers
-    INTO :v_headers
+  SELECT split_headers, COALESCE(method_options, OBJECT_CONSTRUCT())
+    INTO :v_headers, :v_options
     FROM CORE.PIPELINE_CONFIG
    WHERE config_name = :p_config_name;
 
+  -- 老配置 options 为空，保持原流程；新配置只打开显式选择的处理。
+  v_document := CORE.CLEAN_MARKDOWN_DOCUMENT(v_document, v_options);
+  v_body_target_tokens := COALESCE(v_options:body_target_tokens::INTEGER, p_max_tokens);
+  v_table_target_tokens := COALESCE(v_options:table_target_tokens::INTEGER, 450);
+
   -- 候选块按原文 span 顺序排列。表格文本含重复前缀，位置取其实际数据行范围。
   -- 1. 段结构：TEXT 交给标题切分；TABLE 交给行组器，两路最后按原文顺序合并。
-  WITH spans AS (
-    SELECT *
-      FROM TABLE(CORE.EXTRACT_MARKDOWN_ELEMENTS(:v_document:text::VARCHAR))
+  WITH raw_spans AS (
+    SELECT * FROM TABLE(CORE.EXTRACT_MARKDOWN_ELEMENTS(:v_document:text::VARCHAR))
+  ),
+  spans AS (
+    SELECT a.source_start AS span_index, a.span_type, a.source_start, a.source_end,
+           a.piece_text AS span_text, NULL::OBJECT AS table_data
+      FROM raw_spans s,
+           TABLE(CORE.SPLIT_ABSTRACT_SPANS(s.span_text, s.source_start, :v_document:abstracts::ARRAY)) a
+     WHERE s.span_type = 'TEXT'
+    UNION ALL
+    SELECT source_start, span_type, source_start, source_end, span_text,
+           CORE.ATTACH_TABLE_NOTES(table_data, :v_document:text::VARCHAR, source_end,
+             COALESCE(:v_options:attach_table_notes::BOOLEAN, FALSE))
+      FROM raw_spans WHERE span_type = 'TABLE'
   ),
   -- 2. 每行只计数一次，避免尝试添加每一行都重新计数整个表格。
   counted_tables AS (
@@ -84,13 +102,19 @@ BEGIN
      WHERE s.span_type = 'TEXT'
        AND NULLIF(TRIM(c.value:chunk::VARCHAR), '') IS NOT NULL
     UNION ALL
+    -- 摘要不经过标题细切；超出模型硬上限时才进入末尾的递归兜底。
+    SELECT s.span_index, 0,
+           OBJECT_CONSTRUCT('kind', 'ABSTRACT', 'span_index', s.span_index,
+             'span_start', s.source_start, 'span_end', s.source_end, 'text', TRIM(s.span_text))
+      FROM spans s WHERE s.span_type = 'ABSTRACT'
+    UNION ALL
     SELECT t.span_index,
            p.piece_index,
            OBJECT_CONSTRUCT(
              'kind', 'TABLE',
              'text', p.chunk_text,
-             'start', p.source_start,
-             'end', p.source_end
+             'start', IFF(COALESCE(:v_options:attach_table_notes::BOOLEAN, FALSE), LEAST(t.source_start, p.source_start), p.source_start),
+             'end', GREATEST(p.source_end, COALESCE(t.table_data:notes_end::INTEGER, p.source_end))
            )
       FROM counted_tables t,
            TABLE(CORE.BUILD_TABLE_CHUNKS(
@@ -113,14 +137,16 @@ BEGIN
   )
   WITH RECURSIVE located AS (
     SELECT *,
-           SNOWFLAKE.CORTEX.COUNT_TOKENS(:p_token_model, chunk_text) AS token_count
+           SNOWFLAKE.CORTEX.COUNT_TOKENS(:p_token_model, chunk_text) AS token_count,
+           IFF(GET(:v_candidates, piece_index):kind::VARCHAR = 'TEXT',
+               :v_body_target_tokens, :p_max_tokens) AS token_limit
       FROM TABLE(CORE.ANNOTATE_CHUNK_LOCATIONS(:v_document, :v_candidates))
   ),
   split_tree (
-    sort_path, chunk_text, token_count, section_path, page_start, page_end, split_size
+    sort_path, chunk_text, token_count, section_path, page_start, page_end, split_size, token_limit
   ) AS (
     SELECT LPAD(piece_index::VARCHAR, 6, '0')::VARCHAR(4096), chunk_text, token_count,
-           section_path, page_start, page_end, :p_resplit_size
+           section_path, page_start, page_end, :p_resplit_size, token_limit
       FROM located
     UNION ALL
     -- 复用补切版的递归规则，尺寸逐次减半；正常正文与表格不经过这一步。
@@ -129,20 +155,20 @@ BEGIN
            child.value::VARCHAR,
            SNOWFLAKE.CORTEX.COUNT_TOKENS(:p_token_model, child.value::VARCHAR),
            t.section_path, t.page_start, t.page_end,
-           GREATEST(1, FLOOR(t.split_size / 2))
+           GREATEST(1, FLOOR(t.split_size / 2)), t.token_limit
       FROM split_tree t,
            LATERAL FLATTEN(input => SNOWFLAKE.CORTEX.SPLIT_TEXT_RECURSIVE_CHARACTER(
              t.chunk_text, :p_format, t.split_size,
              LEAST(:p_overlap, FLOOR(t.split_size / 5))
            )) child
-     WHERE (t.token_count IS NULL OR t.token_count > :p_max_tokens)
+     WHERE (t.token_count IS NULL OR t.token_count > t.token_limit)
        AND t.split_size > 1
   ),
   numbered AS (
     SELECT *,
            ROW_NUMBER() OVER (ORDER BY sort_path) - 1 AS chunk_index
       FROM split_tree
-     WHERE (token_count <= :p_max_tokens OR split_size <= 1)
+     WHERE (token_count <= token_limit OR split_size <= 1)
        AND NULLIF(TRIM(chunk_text), '') IS NOT NULL
   )
   SELECT SHA2(:p_relative_path || '|' || :p_etag || '|' || :p_config_name || '|'

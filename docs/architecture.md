@@ -41,18 +41,18 @@ PARSED_DOCS 让切分实验复用同一次解析。当前成功缓存只按文�
 
 ## 切分与检索解耦
 
-所有策略写入 CORE.CHUNKS，以 config_name 区分，chunk_id 由文件版本、配置与块序号生成。CHUNK_DOC 负责输入检查、动态分派和事务，各算法只负责生成块及策略自己的验收，不把算法分支堆进入口。
+所有策略写入 CORE.CHUNKS，以 config_name 区分，chunk_id 由文件版本、配置与块序号生成。chunk/schema.sql 定义块表，chunk_doc.sql 中的 CHUNK_DOC 负责输入检查、动态分派和事务；strategies/ 中的算法只负责生成块及策略自己的验收，不把算法分支堆进入口。
 
-基线逐页 recursive 一次，1200 字符、200 overlap、Snowflake 默认分隔符，token_count 仅观察；它简单可复现，但跨页证据或表格可能被切散。补切版在超过 512 token 时递归缩小尺寸，满足模型窗口，代价是更碎的块。章节表格策略拼接全文、分开正文和表格，尽量保住标题及数值归属，但仍受复杂表格启发式与窗口大小限制。具体流程和示例见 [章节表格策略](../src/ingestion/sql/chunk/structured_markdown/README.md)。
+基线逐页 recursive 一次，1200 字符、200 overlap、Snowflake 默认分隔符，token_count 仅观察；它简单可复现，但跨页证据或表格可能被切散。补切版在超过 512 token 时递归缩小尺寸，满足模型窗口，代价是更碎的块。章节表格策略拼接全文、分开正文和表格，尽量保住标题及数值归属，但仍受复杂表格启发式与窗口大小限制。长窗口实验配置复用该流程，正文目标 1024 tokens，摘要/表格允许到 8192 tokens，另加保守的参考文献与出版噪声过滤；处理选项存于 method_options，旧配置保持原行为。流程、取舍和边界统一见 [切分策略](chunking.md)。
 
 当前 chunk_text_raw 是为既有表结构保留的冗余列，各算法写入与 chunk_text 相同的内容；展示、评测及检索统一读取 chunk_text。检索专用标题前缀在服务源查询中生成，不写回这两个字段。
 
-Cortex Search 的四套索引分别比较基线、章节正文、标题前缀和章节 multi-index。服务决定哪些字段进入关键词/向量索引；请求决定查询权重和重排强度。切分配置、索引配置与请求配置是三个不同因素。详见 [检索配置](../src/serving/README.md)，历史结果见 [实验记录](experiments/README.md)。
+Cortex Search 的原有四套索引分别比较基线、章节正文、标题前缀和章节 multi-index；8K 实验另建旧块模型对照和长窗口配置服务。服务决定哪些字段进入关键词/向量索引；请求决定查询权重和重排强度。切分配置、索引配置与请求配置是三个不同因素。详见 [检索配置](serving.md)，历史结果见 [实验记录](experiments/README.md)。
 
 ## 评测与应用
 
 题集依据原始 PDF、文件哈希、页码和证据建立，不依赖 chunk_id；固定同一套问题比较不同策略，避免某一种切法定义正确答案。题集构建与检索实验独立，流程和评分边界见 [eval](../eval/README.md)。当前评测是单块证据覆盖，不是生成答案质量，也不代表多块合并后的上下文质量。
 
-前端只通过 HTTP 请求后端，不直接连接 Snowflake。后端连接层只管理连接；检索与生成分别调用 Cortex Search 和 AI_COMPLETE，`/ask` 路由组织证据，接收逐条结论及来源摘录，校验来源编号与摘录存在后生成回答标记。前端展示结论与原句的对应关系。校验只证明摘录来自检索块，不证明结论受支持；证据不足也不允许绕过已输出事实的校验。应用默认使用最佳历史 multi-index 服务及请求权重，独立于入库 active 配置。前端 context_management.py 在 session_state 中保留最近 20 轮问答及各轮引用，提供最近 5 轮的文本窗口和清空操作；当前不把历史对话送给模型，问题改写与 token 预算尚未实现。SPCS 只公开前端，由 Snowflake 认证；后端使用挂载 OAuth token，以服务所有者角色访问同一语料，尚无用户级文档权限设计。
+前端只通过 HTTP 请求后端，不直接连接 Snowflake。后端连接层只管理连接；检索与生成分别调用 Cortex Search 和 AI_COMPLETE，`/ask` 路由串起完整请求链路，prompts.py 构造证据提示，citations.py 校验逐条结论的来源编号与摘录后生成回答标记。前端展示结论与原句的对应关系。校验只证明摘录来自检索块，不证明结论受支持；证据不足也不允许绕过已输出事实的校验。应用默认使用最佳历史 multi-index 服务及请求权重，独立于入库 active 配置。前端 context_management.py 在 session_state 中保留最近 20 轮问答及各轮引用，提供最近 5 轮的文本窗口和清空操作；当前不把历史对话送给模型，问题改写与 token 预算尚未实现。SPCS 只公开前端，由 Snowflake 认证；后端使用挂载 OAuth token，以服务所有者角色访问同一语料，尚无用户级文档权限设计。
 
 `src/ingestion/` 放入库，`src/serving/` 放搜索和应用，`eval/` 放评测；Python 包名保持 medical_rag。基础设施、部署、工具与测试独立。部署方式见 [deployment](deployment.md)，主要工程问题及解决路径见 [challenges](challenges.md)。

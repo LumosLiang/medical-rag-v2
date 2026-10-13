@@ -2,12 +2,18 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-MODULES = ROOT / 'src/ingestion/sql/chunk/structured_markdown'
+MODULES = ROOT / 'src/ingestion/sql/chunk/strategies/structured_markdown'
+HANDLERS = {
+    'normalize_pages': 'document/normalize_pages.sql',
+    'extract_elements': 'tables/extract_elements.sql',
+    'build_table_chunks': 'tables/build_table_chunks.sql',
+    'annotate_chunks': 'annotate_chunks.sql',
+}
 
 
 def handler(name):
     namespace = {}
-    exec((MODULES / f'{name}.sql').read_text().split('$$')[1], namespace)
+    exec((MODULES / HANDLERS[name]).read_text().split('$$')[1], namespace)
     return namespace
 
 
@@ -16,7 +22,7 @@ def spans(text):
 
 
 def test_normalize_offsets_and_empty_page():
-    result = handler('prepare_document')['normalize']([
+    result = handler('normalize_pages')['normalize']([
         {'index': 2, 'content': ' B  \n\nC\r\n'},
         {'index': 0, 'content': '# A\n\ntext  '},
         {'index': 1, 'content': '\n '},

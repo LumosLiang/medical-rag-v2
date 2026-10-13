@@ -2,6 +2,8 @@
 
 设计以 `docs/architecture.md` 为准；当前入库已验证；重试与自动数据检查尚未实现。
 
+chunk/schema.sql 管理块表，chunk/chunk_doc.sql 是统一入口，chunk/strategies/ 保存策略；结构化策略按文档、表格和位置标注划分内部职责。
+
 入库实现位于 `src/ingestion/sql/`，搜索服务与应用位于 `src/serving/`；评测独立位于根目录 `eval/`。
 
 - Event Grid → Queue → directory table → stream → task；队列只给 Snowflake 用，排错只 peek。
@@ -15,4 +17,6 @@
 - 各策略的块共用 CORE.CHUNKS，以 config_name 区分；每个检索服务只筛选一个配置，服务名后缀对应该配置名。新策略保持 inactive，固定快照回填和评测；日常 ingest 仍只用基线。
 - stage 先建且 REFRESH_ON_CREATE=FALSE，再建 stream，再 REFRESH；stage 和 task 已部署，运行状态见 current-state。留意 SHOW STREAMS 的 STALE_AFTER，不把默认保留期当成固定保证。
 
-自动数据检查、失败重试和参考文献处理尚未实现。出处见 architecture 的官方参考，主要设计取舍见 `docs/challenges.md`。
+`structured_markdown_8k_body_1024` 为 inactive 实验配置：正文目标 1024 tokens，摘要/表格硬上限 8192，method_options 控制完整摘要、表格预算与保守噪声过滤。只处理明确识别的参考文献章节，不按正文引用数字删文本；清理后重算全文页范围。旧配置 options 为空，保留原行为。
+
+自动数据检查、失败重试尚未实现；参考文献标题缺失的兜底识别尚未实现。出处见 architecture 的官方参考，主要设计取舍见 `docs/challenges.md`。
