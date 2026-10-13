@@ -32,11 +32,24 @@ class SearchResponse(BaseModel):
     config_name: str
 
 
+class Citation(BaseModel):
+    source_id: int = Field(strict=True)
+    quote: str = Field(min_length=1)
+
+
+class Claim(BaseModel):
+    text: str = Field(min_length=1)
+    citations: list[Citation]
+
+
 class AnswerResponse(SearchResponse):
+    # answer 由后端根据通过校验的 claims 拼接，供展示和会话历史使用。
     answer: str
+    claims: list[Claim] = Field(default_factory=list)
     insufficient_evidence: bool
 
 
 class Completion(BaseModel):
-    answer: str = Field(min_length=1)
+    # 模型只输出结论和证据，不自行生成文件信息或 [1] 这样的展示编号。
+    claims: list[Claim]
     insufficient_evidence: bool

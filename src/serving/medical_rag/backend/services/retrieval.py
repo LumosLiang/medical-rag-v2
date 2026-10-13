@@ -49,6 +49,7 @@ class RetrievalService:
             for citation_id, row in enumerate(result_rows, start=1):
                 # chunk_id 标识数据库中的块；citation_id 只给本次回答编号。
                 # 文件、页码和原文来自检索结果，不由生成模型填写。
+                # citation_id 起始为 1，便于模型引用
                 source = Source(
                     citation_id=citation_id,
                     chunk_id=row["CHUNK_ID"],

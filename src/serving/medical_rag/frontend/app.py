@@ -55,8 +55,6 @@ if submitted:
             with st.spinner("正在查询文献…"):
                 result = send_query(payload, generate_answer)
                 save_result(question.strip(), result)
-        except NotImplementedError as error:
-            st.info(str(error))
         except httpx.HTTPStatusError as error:
             st.session_state.pop("result", None)
             try:
@@ -85,6 +83,14 @@ def display_result(result: dict) -> None:
         if source["cited"]:
             label += " · 已引用"
         with st.expander(label, expanded=source["cited"]):
+            # 每段摘录旁保留对应结论，便于核对“这句话依据哪里”。
+            # 旧会话和 /search 没有 claims，仍可展示原始片段。
+            for claim in result.get("claims", []):
+                for citation in claim["citations"]:
+                    if citation["source_id"] == source["citation_id"]:
+                        st.caption("对应结论：" + claim["text"])
+                        st.text(citation["quote"])
+            st.caption("完整检索片段")
             st.text(source["text"])
 
 

@@ -69,7 +69,7 @@ def test_generation_response_format_and_empty_result(monkeypatch, empty_response
         def fetchone(self):
             if empty_response:
                 return (None,)
-            return ('{"answer": "结果 [1]", "insufficient_evidence": false}',)
+            return ('{"claims": [{"text": "结果", "citations": [{"source_id": 1, "quote": "Original evidence."}]}], "insufficient_evidence": false}',)
 
         def __enter__(self):
             return self
@@ -91,12 +91,13 @@ def test_generation_response_format_and_empty_result(monkeypatch, empty_response
             service.complete("test prompt")
     else:
         result = service.complete("test prompt")
-        assert result.answer == "结果 [1]"
+        assert result.claims[0].text == "结果"
+        assert result.claims[0].citations[0].quote == "Original evidence."
         assert result.insufficient_evidence is False
 
     response_format = json.loads(captured["parameters"][2])
     assert response_format["type"] == "json"
-    assert response_format["schema"]["required"] == ["answer", "insufficient_evidence"]
+    assert response_format["schema"]["required"] == ["claims", "insufficient_evidence"]
     assert captured["connection_closed"]
     assert captured["cursor_closed"]
 

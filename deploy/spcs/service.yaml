@@ -2,7 +2,7 @@ spec:
   containers:
     - name: backend
       mountSessionToken: true
-      image: /medrag/ops/app_images/backend:20261012
+      image: /medrag/ops/app_images/backend:20261013-citations
       env:
         SNOWFLAKE_DATABASE: MEDRAG
         SNOWFLAKE_SCHEMA: CORE
@@ -14,7 +14,7 @@ spec:
         port: 8000
         path: /healthz
     - name: frontend
-      image: /medrag/ops/app_images/frontend:20261012
+      image: /medrag/ops/app_images/frontend:20261013-citations
       mountSessionToken: false
       env:
         BACKEND_URL: http://localhost:8000

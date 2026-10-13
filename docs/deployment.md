@@ -50,7 +50,7 @@ docker push "$rag_repository_url/frontend:$rag_image_tag"
 snow sql -c '<connection_name>' -f deploy/spcs/deploy.sql
 ```
 
-部署入口上传 spec，创建不存在的服务或更新同一服务，再返回容器状态及端点。公开地址以 `SHOW ENDPOINTS IN SERVICE MEDRAG.OPS.MEDICAL_RAG_APP` 的 ingress_url 为准，使用 Snowflake 身份登录。验收要求容器 READY，并完成真实 `/search`、`/ask` 调用。当前已部署镜像标签为 `20261012`。
+部署入口上传 spec，创建不存在的服务或更新同一服务，再返回容器状态及端点。公开地址以 `SHOW ENDPOINTS IN SERVICE MEDRAG.OPS.MEDICAL_RAG_APP` 的 ingress_url 为准，使用 Snowflake 身份登录。验收要求容器 READY，并完成真实 `/search`、`/ask` 调用。当前已部署镜像标签为 `20261013-citations`，前后端容器均 READY；同镜像的云端 OAuth 验证任务已通过检索、生成与逐条摘录校验。
 
 账号、凭据及连接名由本机配置或运行参数提供，不写入仓库。受限 PAT 不能执行 `USE ROLE` 时，在本机执行副本中移除角色语句并由 CLI 指定原角色，不修改仓库的标准角色声明。
 

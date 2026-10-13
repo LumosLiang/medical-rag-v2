@@ -1,6 +1,6 @@
 # 检索与回答服务
 
-Cortex Search 从 CHUNKS 构建索引，FastAPI 负责接收问题、检索和回答，Streamlit 展示问题、答案与引用。应用包名为 medical_rag。后端 /search、/ask、检索和生成已实现并通过本地测试与真实 Snowflake 调用；云端容器 OAuth 身份下的检索与回答已验收。
+Cortex Search 从 CHUNKS 构建索引，FastAPI 负责接收问题、检索和回答，Streamlit 展示问题、答案与引用。应用包名为 medical_rag。后端 /search、/ask、检索和生成已实现。旧版行内引用已在云端容器 OAuth 身份下验收；逐结论摘录版通过本地测试与 10 道固定题真实调用，额外无答案问题返回受控生成错误，已部署到 SPCS；同镜像云端 OAuth 验证任务通过检索与引用回答。无答案问题的生成错误仍是已知边界。
 
 服务定义位于 `cortex_search/`，Python 应用位于 `medical_rag/`。
 
@@ -49,7 +49,11 @@ SQL 定义索引字段、源配置、模型与刷新目标。此前调参改变�
 - `services/generation.py`：调用 AI_COMPLETE，读取结构化回答。
 - `api.py`：HTTP 请求和响应；`/search` 只检索，`/ask` 直接串起检索、证据提示词、生成与引用校验，不增加独立业务层；检索和生成对象通过 FastAPI Depends 注入。
 
-引用的文件、物理页码和原文来自检索结果，模型只引用来源编号。回答流程要求仅依据证据、证据不足时拒答，并拒绝不存在的编号或没有引用的正常回答。这些检查不能证明每项结论受证据支持；当前尚无自动语义核验，也未实现可点击的 PDF 链接。后续计划让模型逐条输出结论与 source_ids，再由前端渲染引用；具体边界见 [工程难点](../../docs/challenges.md#带引用的回答与校验边界)。
+回答按 `claims` 返回，每条结论包含 `citations`：来源编号 `source_id` 与必要的原文摘录 `quote`。后端逐条检查引用不为空、编号属于本次检索、摘录在对应片段中存在；仅合并空白差异，不删除标点或改变数字。通过后由后端生成 [1] 等标记及供展示、会话使用的 answer，前端在来源卡片中展示对应结论、引用原句与完整片段。文件、页码和 chunk_id 始终来自检索，不由模型生成。
+
+`insufficient_evidence` 仍是模型判断，不允许绕过事实结论的校验。有支持的部分结论可保留，并追加固定的证据不足提示；完全没有支持的结论返回空 claims 与固定提示。非法引用或摘录返回 502，前端显示错误而不保存未经校验的答案；当前不自动重试。
+
+摘录存在只证明文本来自检索片段，不证明其支持结论；解析本身也可能与 PDF 不一致。提示词要求保留研究条件、人群、不确定性与矛盾结果，不将相关性表述成因果或将单篇发现推广成治疗建议。引用页码是来源块的范围，不是摘录精确所在页。尚无独立语义核验或可点击 PDF 链接。工程取舍见 [工程难点](../../docs/challenges.md#带引用的回答与校验边界)。
 
 默认生成模型为 `claude-opus-5`，属于 Snowflake 当前支持的新一代模型，不宣称它是所有厂商中最新或本项目效果最佳的模型；本账户与云端 OAuth 身份下已成功调用；生成质量尚未做正式评测。[官方模型与函数说明](https://docs.snowflake.com/en/user-guide/snowflake-cortex/aisql-regional-availability)。配置可通过 RAG_MODEL、RAG_SEARCH_SERVICE、RAG_CONFIG_NAME 与 RAG_SCORING_CONFIG 覆盖；更换服务时同时核对来源配置与字段权重。
 

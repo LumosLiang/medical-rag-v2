@@ -53,6 +53,6 @@ Cortex Search 的四套索引分别比较基线、章节正文、标题前缀和
 
 题集依据原始 PDF、文件哈希、页码和证据建立，不依赖 chunk_id；固定同一套问题比较不同策略，避免某一种切法定义正确答案。题集构建与检索实验独立，流程和评分边界见 [eval](../eval/README.md)。当前评测是单块证据覆盖，不是生成答案质量，也不代表多块合并后的上下文质量。
 
-前端只通过 HTTP 请求后端，不直接连接 Snowflake。后端连接层只管理连接；检索与生成分别调用 Cortex Search 和 AI_COMPLETE，`/ask` 路由直接组织证据并验证引用编号。编号校验不能证明结论受原文支持。应用默认使用最佳历史 multi-index 服务及请求权重，独立于入库 active 配置。前端 context_management.py 在 session_state 中保留最近 20 轮问答及各轮引用，提供最近 5 轮的文本窗口和清空操作；当前不把历史对话送给模型，问题改写与 token 预算尚未实现。SPCS 只公开前端，由 Snowflake 认证；后端使用挂载 OAuth token，以服务所有者角色访问同一语料，尚无用户级文档权限设计。
+前端只通过 HTTP 请求后端，不直接连接 Snowflake。后端连接层只管理连接；检索与生成分别调用 Cortex Search 和 AI_COMPLETE，`/ask` 路由组织证据，接收逐条结论及来源摘录，校验来源编号与摘录存在后生成回答标记。前端展示结论与原句的对应关系。校验只证明摘录来自检索块，不证明结论受支持；证据不足也不允许绕过已输出事实的校验。应用默认使用最佳历史 multi-index 服务及请求权重，独立于入库 active 配置。前端 context_management.py 在 session_state 中保留最近 20 轮问答及各轮引用，提供最近 5 轮的文本窗口和清空操作；当前不把历史对话送给模型，问题改写与 token 预算尚未实现。SPCS 只公开前端，由 Snowflake 认证；后端使用挂载 OAuth token，以服务所有者角色访问同一语料，尚无用户级文档权限设计。
 
 `src/ingestion/` 放入库，`src/serving/` 放搜索和应用，`eval/` 放评测；Python 包名保持 medical_rag。基础设施、部署、工具与测试独立。部署方式见 [deployment](deployment.md)，主要工程问题及解决路径见 [challenges](challenges.md)。

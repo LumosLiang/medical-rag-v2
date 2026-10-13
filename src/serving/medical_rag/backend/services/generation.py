@@ -11,33 +11,53 @@ class GenerationService:
         self.settings = settings
 
     def complete(self, prompt: str) -> Completion:
-        # 约束模型返回的 JSON 字段；这不是数据库表的 schema。
-        schema = {
+
+        # 先定义一条引用和一条结论，再组合成完整响应，避免嵌套难以阅读。
+        # Schema 约束格式；原文是否存在、引用是否有效由 /ask 校验。
+        citation_schema = {
             "type": "object",
             "properties": {
-                "answer": {"type": "string"},
-                "insufficient_evidence": {"type": "boolean"},
+                "source_id": {"type": "integer"},
+                "quote": {"type": "string"},
             },
-            "required": ["answer", "insufficient_evidence"],
+            "required": ["source_id", "quote"],
             "additionalProperties": False,
         }
-
+        claim_schema = {
+            "type": "object",
+            "properties": {
+                "text": {"type": "string"},
+                "citations": {"type": "array", "items": citation_schema},
+            },
+            "required": ["text", "citations"],
+            "additionalProperties": False,
+        }
+        final_schema = {
+            "type": "object",
+            "properties": {
+                "claims": {"type": "array", "items": claim_schema},
+                "insufficient_evidence": {"type": "boolean"},
+            },
+            "required": ["claims", "insufficient_evidence"],
+            "additionalProperties": False,
+        }
         response_format = {
             "type": "json",
-            "schema": schema,
+            "schema": final_schema,
         }
         response_format_json = json.dumps(response_format)
 
-        # SQL 使用参数占位符，问题里的引号不会被当成 SQL 语法。
         # 官方：https://docs.snowflake.com/en/sql-reference/functions/ai_complete-structured-outputs
+        # 原文摘录使输出变长；使用平台默认输出预算，不再沿用旧的 1200 上限。
         sql = """
             SELECT AI_COMPLETE(
                 %s,
                 %s,
-                OBJECT_CONSTRUCT('temperature', 0, 'max_tokens', 1200),
+                OBJECT_CONSTRUCT('temperature', 0),
                 PARSE_JSON(%s)
             )
         """
+
         parameters = (
             self.settings.model,
             prompt,
