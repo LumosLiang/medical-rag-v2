@@ -30,7 +30,7 @@ chunk/
 | markdown_header_table_1200_200 | 全文标题切正文，表格按组及行切；表格软预算 450，硬上限 512 | 保留章节和表头，仍可能拆散需要多行共同支持的答案 |
 | structured_markdown_8k_body_1024 | 同一结构化流程；正文目标 1024 tokens，摘要与表格尽量完整保留，模型硬上限 8192 | 更多上下文，但可能稀释精确相关性并扩大引用范围 |
 
-参数由 [PIPELINE_CONFIG](../src/ingestion/sql/config.sql) 固定。日常 active 选择与实验配置独立，当前仍使用 recursive 基线；切换配置不会自动重切历史文件或更换应用索引。
+参数由 [PIPELINE_CONFIG](../src/ingestion/sql/config.sql) 固定。日常 active 和应用目前统一选择 structured_markdown_8k_body_1024；旧 recursive 与 Markdown 配置保留为对照。切换 active 本身不会自动重切历史文件或更换应用索引。
 
 ## 结构化流程
 

@@ -70,13 +70,7 @@ SELECT s.config_name, 'LAYOUT', TRUE, s.chunk_method, s.split_format, s.split_he
   FROM strategies s
  WHERE NOT EXISTS (SELECT 1 FROM PIPELINE_CONFIG c WHERE c.config_name = s.config_name);
 
--- 只有尚未选定日常策略时才初始化基线；重复部署不覆盖用户已选的 active 配置。
-UPDATE PIPELINE_CONFIG
-   SET is_active = TRUE
- WHERE config_name = 'recursive_once_1200_200'
-   AND NOT EXISTS (SELECT 1 FROM PIPELINE_CONFIG WHERE is_active);
-
--- 8K 实验：正文约 1024 token，摘要/表格允许接近完整模型窗口。
+-- 8K 策略：正文约 1024 token，摘要/表格允许接近完整模型窗口。
 -- 4096/600 是原生 splitter 的字符参数；正文另有精确 token 目标，不假定固定字符/token 比例。
 INSERT INTO PIPELINE_CONFIG (
   config_name, parse_mode, page_split, chunk_method, split_format, split_headers,
@@ -92,3 +86,9 @@ SELECT 'structured_markdown_8k_body_1024', 'LAYOUT', TRUE, 'structured_markdown'
          'drop_publication_noise', TRUE, 'attach_table_notes', TRUE),
        '8K model; body target 1024 tokens; full abstracts/tables when within window; conservative noise removal'
  WHERE NOT EXISTS (SELECT 1 FROM PIPELINE_CONFIG WHERE config_name = 'structured_markdown_8k_body_1024');
+
+-- 新环境默认采用已验证的 8K 策略；已有环境的 active 选择由运行切换显式更新。
+UPDATE PIPELINE_CONFIG
+   SET is_active = TRUE
+ WHERE config_name = 'structured_markdown_8k_body_1024'
+   AND NOT EXISTS (SELECT 1 FROM PIPELINE_CONFIG WHERE is_active);

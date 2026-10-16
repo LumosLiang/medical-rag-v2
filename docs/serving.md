@@ -4,7 +4,7 @@ Cortex Search 构建检索索引，FastAPI 串起检索和生成，Streamlit 展
 
 ## 搜索服务
 
-原有四个服务使用 snowflake-arctic-embed-l-v2.0；新增两个 8K 实验服务使用 snowflake-arctic-embed-l-v2.0-8k。所有服务使用 chunk_id 主键及 1 小时 TARGET_LAG。
+原有四个服务使用 snowflake-arctic-embed-l-v2.0；两个 8K 服务使用 snowflake-arctic-embed-l-v2.0-8k。所有服务使用 chunk_id 主键及 1 小时 TARGET_LAG。
 
 | SQL | 切分配置 | 关键词输入 | 向量输入 |
 |---|---|---|---|
@@ -17,9 +17,9 @@ Cortex Search 构建检索索引，FastAPI 串起检索和生成，Streamlit 展
 
 单 ON 字段的服务也是混合检索，包含关键词、向量及原生重排。ATTRIBUTES 是筛选字段，不会仅因列在 SELECT 中就参与关键词搜索。前缀服务在源查询构造 search_text，原始 chunk_text 保留用于展示和评分；代价是标题占用 embedding 窗口。Multi-index 让章节单独提供关键词信号，不为章节增加向量。
 
-8K CONTROL 只换模型；BODY_1024 同时扩大正文、保留完整摘要/表格并清理明确噪声。实验请求沿用最佳权重，实验不会自动切换应用。切分定义见 [长窗口配置](chunking.md)。
+8K CONTROL 只换模型；BODY_1024 同时扩大正文、保留完整摘要/表格并清理明确噪声。请求沿用已选定的权重；2026-10-16 应用显式切换到 BODY_1024 服务，CONTROL 保留为模型对照。切分定义见 [长窗口配置](chunking.md)。
 
-实际服务名保留现有标识，写在各 SQL 中。应用仍选择旧 512 模型的 Markdown multi-index 服务，并发送下方经调参选定的请求权重；最新 8K 实验服务尚未切入应用；日常入库使用 recursive 基线，因此新增文档不会自动进入应用当前选择的 Markdown 索引。两者暂不切换；应用配置改变也不触发历史文档重切。
+实际服务名写在各 SQL 中。应用与日常入库统一采用 structured_markdown_8k_body_1024，搜索服务为 MEDICAL_CHUNKS_STRUCTURED_MARKDOWN_8K_BODY_1024。新增文件处理后进入同一索引，TARGET_LAG 为一小时。旧服务保留为对照；日后调整应用或 active 时，仍需同时核对两端选择。
 
 ## 服务定义与查询调参是两层配置
 

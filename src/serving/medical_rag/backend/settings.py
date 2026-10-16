@@ -28,10 +28,10 @@ class Settings:
     schema: str = "CORE"
     warehouse: str = "MEDICAL_RAG_INDEX_WH"
     # config_name 标识块来源；同一批块可以建立多个不同的搜索服务。
-    config_name: str = "markdown_header_table_1200_200"
-    search_service: str = "MEDICAL_CHUNKS_MARKDOWN_MULTI_INDEX_1200_200"
+    config_name: str = "structured_markdown_8k_body_1024"
+    search_service: str = "MEDICAL_CHUNKS_STRUCTURED_MARKDOWN_8K_BODY_1024"
     model: str = "claude-opus-5"
-    # 最佳历史实验请求：整体关键词/向量/重排 1:1:3，正文/章节关键词 1:3。
+    # 8K 方案沿用已选定的请求权重：关键词/向量/重排 1:1:3，正文/章节关键词 1:3。
     # 权重必须随 search 请求发送，不是服务定义自带的默认值。
     scoring_config: dict = field(default_factory=default_scoring_config)
 
