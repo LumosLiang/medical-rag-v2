@@ -7,7 +7,8 @@
 ## 主要能力
 
 - **事件驱动入库**：文件新增、覆盖和删除通过 Event Grid、Storage Queue、directory table、Stream 与 Task 驱动处理，无需业务代码轮询对象存储。
-- **结构感知切分**：缓存 LAYOUT 解析结果；支持 recursive 基线、限窗补切、跨页 Markdown 章节与表格处理，以及 8K 上下文配置。不同策略的结果可以共存。
+- **湖上直接解析**：AI_PARSE_DOCUMENT 直接读取 Azure external stage 中的 PDF，无需先复制到 Snowflake 内部 stage；解析结果按文件版本缓存并复用。
+- **结构感知切分**：拼接全文恢复跨页章节，过滤明确的参考文献和出版噪声；8K 配置对正文控制块大小，对摘要和表格优先保留完整证据。不同策略的结果可以共存。
 - **混合检索**：Cortex Search 提供关键词、向量及原生重排；multi-index 将完整章节路径作为独立关键词信号，索引与请求权重分别配置。
 - **可追溯回答**：模型按结论返回来源编号和原文摘录，后端校验后生成引用标记；前端展示结论、摘录、文件、页码与完整检索片段。
 - **独立检索评测**：题集绑定原 PDF、页码和证据，不绑定 chunk_id，可公平比较不同切分与搜索配置。
@@ -39,6 +40,11 @@
 ```text
 src/
 ├── ingestion/sql/             # 文件变化、解析与任务调度
+│   ├── config.sql             # 切分配置
+│   ├── source.sql             # 外部文件目录与变化流
+│   ├── task.sql               # 触发入库流程
+│   ├── run_pipeline.sql       # 协调各处理阶段
+│   ├── stages/                # 捕获、分类、删除与解析
 │   └── chunk/
 │       ├── schema.sql         # 文档块表
 │       ├── chunk_doc.sql      # 配置分派与事务入口

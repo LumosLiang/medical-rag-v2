@@ -13,7 +13,6 @@ def validate_claim_citations(claim: Claim, sources_by_id: dict[int, Source]) -> 
     if re.search(r"\[\d+\]", claim.text):
         raise HTTPException(status_code=502, detail="本次回答包含自行生成的引用标记，请重试。")
 
-    # 同一结论的重复引用只展示一次编号，保留首次出现顺序。
     claim_source_ids = []
 
     for citation in claim.citations:
@@ -28,6 +27,7 @@ def validate_claim_citations(claim: Claim, sources_by_id: dict[int, Source]) -> 
         if not normalized_quote or normalized_quote not in normalized_source:
             raise HTTPException(status_code=502, detail="引用摘录未能在对应文献片段中找到，请重试。")
 
+        # 同一结论的重复引用只保留一次编号，保留首次出现顺序。
         if citation.source_id not in claim_source_ids:
             claim_source_ids.append(citation.source_id)
 
@@ -52,7 +52,7 @@ def render_cited_answer(completion: Completion, sources: list[Source]) -> str:
         claim_source_ids = validate_claim_citations(claim, sources_by_id)
         cited_ids.update(claim_source_ids)
 
-        # 可能一个结论会多次引用一个来源，所以同一结论多次引用一个来源时只展示一个编号。
+        # 将已校验、去重的来源编号转换为前端展示的 [1]、[2] 等标记。
         markers = []
         for source_id in claim_source_ids:
             markers.append(f"[{source_id}]")

@@ -4,7 +4,7 @@
 
 chunk/schema.sql 管理块表，chunk/chunk_doc.sql 是统一入口，chunk/strategies/ 保存策略；结构化策略按文档、表格和位置标注划分内部职责。
 
-入库实现位于 `src/ingestion/sql/`，搜索服务与应用位于 `src/serving/`；评测独立位于根目录 `eval/`。
+入库实现位于 `src/ingestion/sql/`：config.sql、source.sql 管理配置与数据源，task.sql 触发 run_pipeline.sql，stages/ 保存捕获、分类、删除和解析步骤；搜索服务与应用位于 `src/serving/`；评测独立位于根目录 `eval/`。
 
 - Event Grid → Queue → directory table → stream → task；队列只给 Snowflake 用，排错只 peek。
 - 消费 stream 用 INSERT SELECT；普通 SELECT 不消费。stream 只交给一个消费者。

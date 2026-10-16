@@ -14,9 +14,11 @@ ADLS Gen2 中 PDF 新增 / 覆盖 / 删除
 
 storage integration 授权 Snowflake 读取 PDF；notification integration 授权读取事件队列。directory table 保存文件元数据，stream 记录其净变化，业务 SQL 不直接消费 Storage Queue。采用这条链路可以让对象存储与下游处理分离，文件不必再复制到 Snowflake 内部 stage。[官方 Azure 自动刷新流程](https://docs.snowflake.com/en/user-guide/data-load-dirtables-auto-azure)。
 
-stream 是两次消费之间的净变化：已登记版本被覆盖时是一删一增；同一区间新增再删除可能没有行。CAPTURE_CHANGES 用 INSERT SELECT 消费这些变化并持久化，避免后续处理依赖 stream 重读。文件版本以 `(relative_path, etag)` 标识，batch_id 只标识一次捕获。
+stream 是两次消费之间的净变化：已登记版本被覆盖时是一删一增；同一区间新增再删除可能没有行。CAPTURE_CHANGES 用 INSERT SELECT 消费这些变化并持久化，避免后续处理依赖 stream 重读。文件版本以 `(relative_path, etag)` 标识，batch_id 只标识一次捕获。ETag 复用存储端版本信息，无需自行读取整份文件计算哈希；它不等同于内容哈希，也不是因为 MD5 无法识别同名文件的内容变化。
 
 ## 入库各步骤的边界
+
+`src/ingestion/sql/` 按职责组织：config.sql 定义配置，source.sql 定义外部 stage、目录与 Stream，task.sql 触发 run_pipeline.sql 中的 RUN_INGEST。stages/ 保存捕获、分类、删除和解析步骤；chunk/ 保留切分入口与策略。运行顺序由 RUN_INGEST 的调用表达，部署依赖顺序由根目录 deploy.sql 管理，不依赖文件名编号。
 
 | 步骤 | 输入 → 输出 | 负责什么 |
 |---|---|---|
@@ -37,6 +39,8 @@ AI_PARSE_DOCUMENT 的 OCR 模式只提取文字，LAYOUT 同时提取布局和�
 
 取舍是依赖模型恢复的 Markdown：标题层级可能不准，复杂表格、脚注或数学符号仍可能解析错误。LAYOUT 不等于保留完整 PDF 版式，也不代表理解图片内容；当前没有启用图片提取或图像问答。若任务只需要普通文字而不需要结构，OCR 可以作为更简单的输出；本项目没有做 OCR / LAYOUT 的成本和质量对照，不能宣称哪一个普遍更优。
 
+解析直接读取 external stage 指向的 Azure PDF，无需预先复制到 Snowflake 内部 stage。原始文件留在湖上，解析结果和索引存入 Snowflake，减少重复落地及副本维护；读取仍涉及数据传输。
+
 PARSED_DOCS 让切分实验复用同一次解析。当前成功缓存只按文件版本判断，换 parse_mode 不会自动重新解析；公平比较解析策略还需要独立的解析版本设计。
 
 ## 切分与检索解耦
@@ -53,6 +57,6 @@ Cortex Search 的原有四套索引分别比较基线、章节正文、标题前
 
 题集依据原始 PDF、文件哈希、页码和证据建立，不依赖 chunk_id；固定同一套问题比较不同策略，避免某一种切法定义正确答案。题集构建与检索实验独立，流程和评分边界见 [eval](../eval/README.md)。当前评测是单块证据覆盖，不是生成答案质量，也不代表多块合并后的上下文质量。
 
-前端只通过 HTTP 请求后端，不直接连接 Snowflake。后端连接层只管理连接；检索与生成分别调用 Cortex Search 和 AI_COMPLETE，`/ask` 路由串起完整请求链路，prompts.py 构造证据提示，citations.py 校验逐条结论的来源编号与摘录后生成回答标记。前端展示结论与原句的对应关系。校验只证明摘录来自检索块，不证明结论受支持；证据不足也不允许绕过已输出事实的校验。应用默认使用最佳历史 multi-index 服务及请求权重，独立于入库 active 配置。前端 context_management.py 在 session_state 中保留最近 20 轮问答及各轮引用，提供最近 5 轮的文本窗口和清空操作；当前不把历史对话送给模型，问题改写与 token 预算尚未实现。SPCS 只公开前端，由 Snowflake 认证；后端使用挂载 OAuth token，以服务所有者角色访问同一语料，尚无用户级文档权限设计。
+前端只通过 HTTP 请求后端，不直接连接 Snowflake。后端连接层只管理连接；检索与生成分别调用 Cortex Search 和 AI_COMPLETE，`/ask` 路由串起完整请求链路，prompts.py 构造证据提示，citations.py 校验逐条结论的来源编号与摘录后生成回答标记。前端展示结论与原句的对应关系。校验只证明摘录来自检索块，不证明结论受支持；证据不足也不允许绕过已输出事实的校验。应用仍使用旧 512 模型的 Markdown multi-index 服务及调参权重，尚未切换到最新 8K 实验服务，独立于入库 active 配置。前端 context_management.py 在 session_state 中保留最近 20 轮问答及各轮引用，提供最近 5 轮的文本窗口和清空操作；当前不把历史对话送给模型，问题改写与 token 预算尚未实现。SPCS 只公开前端，由 Snowflake 认证；后端使用挂载 OAuth token，以服务所有者角色访问同一语料，尚无用户级文档权限设计。
 
 `src/ingestion/` 放入库，`src/serving/` 放搜索和应用，`eval/` 放评测；Python 包名保持 medical_rag。基础设施、部署、工具与测试独立。部署方式见 [deployment](deployment.md)，主要工程问题及解决路径见 [challenges](challenges.md)。
